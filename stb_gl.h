@@ -41,7 +41,7 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-#include <gl/glu.h>
+#include <GL/glu.h>
 
 #ifndef APIENTRY
 #define APIENTRY
