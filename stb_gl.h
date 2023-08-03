@@ -105,7 +105,7 @@ extern int stbgl_TexImage2D_Extra(int texid, int w, int h, void *data, int chan,
 //    ycocg     3 channels of input (YCoCg - forces YCoCg output)
 //    ycocgj    4 channels of input (YCoCgJunk - forces YCoCg output)
 //    rgba      4 channels of input (RGBA)
-//    
+//
 // output descriptor: AT MOST ONE
 //   TEXT     MEANING
 //    A         1 channel of output (alpha)
@@ -485,7 +485,7 @@ __declspec(dllimport) stbgl__voidfunc wglGetProcAddress(char *);
 #define STB__HAS_WGLPROC
 static void (__stdcall *stbgl__CompressedTexImage2DARB)(int target, int level,
                                    int internalformat, int width,
-                                   int height, int border, 
+                                   int height, int border,
                                    int imageSize, void *data);
 static void stbgl__initCompTex(void)
 {
@@ -494,7 +494,7 @@ static void stbgl__initCompTex(void)
 #else
 static void (*stbgl__CompressedTexImage2DARB)(int target, int level,
                                    int internalformat, int width,
-                                   int height, int border, 
+                                   int height, int border,
                                    int imageSize, void *data);
 static void stbgl__initCompTex(void)
 {
@@ -693,7 +693,7 @@ int stbgl_TexImage2D_Extra(int texid, int w, int h, void *data, int chan, char *
       }
       ++props;
    }
-   
+
    // override input_desc based on channel count
    if (output_desc != STBGL_NO_DOWNLOAD) {
       switch (abs(chan)) {

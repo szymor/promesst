@@ -299,11 +299,11 @@ void *stbwingraph_CreateWindow(int primary, stbwingraph_window_proc func, void *
    }
 
 
-   z->window = SDL_CreateWindow(text ? text : "sample", 
+   z->window = SDL_CreateWindow(text ? text : "sample",
                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
                       (fullscreen?SDL_WINDOW_FULLSCREEN:0) |
-        	      (resizeable?SDL_WINDOW_RESIZABLE:0) |
-        	      SDL_WINDOW_OPENGL);
+                      (resizeable?SDL_WINDOW_RESIZABLE:0) |
+                      SDL_WINDOW_OPENGL);
 
    SDL_SetWindowData(z->window, "stbptr", z);
 
@@ -404,7 +404,7 @@ float stbwingraph_GetTimestep(float minimum_time)
    float elapsedTime;
    double thisTime;
    static double lastTime = -1;
-   
+
    if (lastTime == -1)
       lastTime = SDL_GetTicks() / 1000.0 - minimum_time;
 
@@ -412,7 +412,7 @@ float stbwingraph_GetTimestep(float minimum_time)
       thisTime = SDL_GetTicks() / 1000.0;
       elapsedTime = (float) (thisTime - lastTime);
       if (elapsedTime >= minimum_time) {
-         lastTime = thisTime;         
+         lastTime = thisTime;
          return elapsedTime;
       }
       #if 1
@@ -461,7 +461,7 @@ int stbwingraph_MainLoop(stbwingraph_update func, float mintime)
 
             switch (msg.type)
             {
-               case SDL_QUIT: 
+               case SDL_QUIT:
                   return 0;
                case SDL_WINDOWEVENT:
                   switch (msg.window.event)
@@ -553,11 +553,11 @@ int stbwingraph_MainLoop(stbwingraph_update func, float mintime)
 			  break;
 		       case SDL_TEXTEDITING:
 		       case SDL_TEXTINPUT:
-		       case SDL_KEYDOWN:      
-		       case SDL_KEYUP:        
-		       case SDL_MOUSEBUTTONDOWN:  
-		       case SDL_MOUSEBUTTONUP:  
-		       case SDL_WINDOWEVENT:  
+		       case SDL_KEYDOWN:
+		       case SDL_KEYUP:
+		       case SDL_MOUSEBUTTONDOWN:
+		       case SDL_MOUSEBUTTONUP:
+		       case SDL_WINDOWEVENT:
 			  needs_drawing = TRUE;
 			  break;
 		    }
@@ -606,7 +606,7 @@ void stbwingraph_SwapBuffers(void *win)
 }
 #endif
 
-#ifdef STB_WINMAIN    
+#ifdef STB_WINMAIN
 void stbwingraph_main(void);
 
 int main(int argc, char **argv)
