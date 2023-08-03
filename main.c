@@ -1178,7 +1178,11 @@ static char *get_savegame_path(void)
 		if (save_dir[i] == '/')
 		{
 			save_dir[i] = '\0';
+#ifdef __MINGW32__
+			mkdir(save_dir);
+#else
 			mkdir(save_dir, S_IRWXU);
+#endif
 			save_dir[i] = '/';
 		}
 	}

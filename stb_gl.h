@@ -39,33 +39,12 @@
 
 #define STB_GL
 
-#if 0
-
-#ifdef _WIN32
-#ifndef WINGDIAPI
-#define CALLBACK    __stdcall
-#define WINGDIAPI   __declspec(dllimport)
-#define APIENTRY    __stdcall
-#endif
-#endif //_WIN32
-
-#include <stddef.h>
-
-#include <gl/gl.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #include <gl/glu.h>
-
-#else
-
-#include <SDL.h>
-#include <SDL_opengl.h>
-
-#define CALLBACK
-#define WINGDIAPI
 
 #ifndef APIENTRY
 #define APIENTRY
-#endif
-
 #endif
 
 #ifndef M_PI
