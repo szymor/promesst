@@ -22,6 +22,7 @@
 
 #pragma warning(disable:4244; disable:4305; disable:4018)
 
+#include <stdbool.h>
 #include <assert.h>
 #include <ctype.h>
 #define STB_DEFINE
@@ -1147,7 +1148,7 @@ gamestate loaded_game;
 static char *get_savegame_path(void)
 {
 	char *root_dir = SDL_getenv("XDG_DATA_HOME");
-	static int gotpath = FALSE;
+	static bool gotpath = false;
 	static char save_dir[PATH_MAX] = {0};
 	if (gotpath) return save_dir;
 	if (!root_dir)
@@ -1156,7 +1157,7 @@ static char *get_savegame_path(void)
 		if (!root_dir)
 		{
 			strcpy(save_dir, "data/save.dat");
-			gotpath = TRUE;
+			gotpath = true;
 			return save_dir;
 		}
 		else
@@ -1186,7 +1187,7 @@ static char *get_savegame_path(void)
 			save_dir[i] = '/';
 		}
 	}
-	gotpath = TRUE;
+	gotpath = true;
 	return save_dir;
 }
 
@@ -1959,7 +1960,9 @@ void draw()
 {
    draw_init();
    draw_world();
-   stbwingraph_SwapBuffers(NULL);
+
+   stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
+   SDL_GL_SwapWindow(z->window);
 }
 
 static int initialized=0;
@@ -2056,11 +2059,11 @@ int main(int argc, char **argv)
 	{
 		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed")))
 		{
-			stbwingraph_request_windowed = TRUE;
+			stbwingraph_request_windowed = true;
 		}
 		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen")))
 		{
-			stbwingraph_request_fullscreen = TRUE;
+			stbwingraph_request_fullscreen = true;
 		}
 	}
 
@@ -2078,11 +2081,11 @@ int main(int argc, char **argv)
 	z->mx = -(1 << 30);
 	z->my = 0;
 
-	int fullscreen = 0;
+	bool fullscreen = 0;
 	if (stbwingraph_request_windowed)
-		fullscreen = FALSE;
+		fullscreen = false;
 	else if (stbwingraph_request_fullscreen)
-		fullscreen = TRUE;
+		fullscreen = true;
 
 	z->window = SDL_CreateWindow(APPNAME,
 					  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_X, SCREEN_Y,
@@ -2140,12 +2143,13 @@ int main(int argc, char **argv)
 	initialized = 1;
 
 	// event loop
-	int needs_drawing = FALSE;
-	int stbwingraph_force_update = FALSE;
+	bool needs_drawing = false;
+	bool stbwingraph_force_update = false;
 	SDL_Event msg;
 
-	int is_animating = TRUE;
+	bool is_animating = true;
 	float mintime = 0.016f;
+	double lastTime = -1;
 
 	for(;;) {
 	  int n;
@@ -2156,10 +2160,10 @@ int main(int argc, char **argv)
 	  SDL_PumpEvents();
 
 	  if (!is_animating || SDL_PeepEvents(&msg, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
-		 stbwingraph_force_update = FALSE;
+		 stbwingraph_force_update = false;
 
-		 while (SDL_PollEvent(&msg))
-		 {
+		while (SDL_PollEvent(&msg))
+		{
 			stbwingraph_event e = { STBWGE__none };
 			stbwingraph__window *z;
 
@@ -2197,7 +2201,7 @@ int main(int argc, char **argv)
 						if (z && z->func)
 							n = z->func(z->data, &e);
 						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = TRUE;
+							stbwingraph_force_update = true;
 						break;
 					case SDL_MOUSEBUTTONDOWN:
 					case SDL_MOUSEBUTTONUP:
@@ -2220,7 +2224,7 @@ int main(int argc, char **argv)
 						if (z && z->func)
 							n = z->func(z->data, &e);
 						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = TRUE;
+							stbwingraph_force_update = true;
 						break;
 					case SDL_KEYDOWN:
 					case SDL_KEYUP:
@@ -2230,7 +2234,7 @@ int main(int argc, char **argv)
 						if (z && z->func)
 							n = z->func(z->data, &e);
 						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = TRUE;
+							stbwingraph_force_update = true;
 						/* We emulate WM_CHAR events, as SDL2's text input API is clearly overdoing it */
 						if (msg.type == SDL_KEYDOWN && msg.key.keysym.sym < 0x40000000)
 						{
@@ -2240,7 +2244,7 @@ int main(int argc, char **argv)
 							if (z && z->func)
 								n = z->func(z->data, &ce);
 							if (n == STBWINGRAPH_winproc_update)
-								stbwingraph_force_update = TRUE;
+								stbwingraph_force_update = true;
 						}
 						break;
 
@@ -2262,11 +2266,11 @@ int main(int argc, char **argv)
 			   case SDL_MOUSEBUTTONDOWN:
 			   case SDL_MOUSEBUTTONUP:
 			   case SDL_WINDOWEVENT:
-			  needs_drawing = TRUE;
+			  needs_drawing = true;
 			  break;
 			}
 		 } else
-			needs_drawing = TRUE;
+			needs_drawing = true;
 		  }
 	  }
 
@@ -2281,24 +2285,36 @@ int main(int argc, char **argv)
 		 int real=1, in_client=1;
 		 if (stbwingraph_primary_window) {
 			stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
-			if (z && !z->active) {
+			if (!z->active) {
 			   real = 0;
 			}
-			if (z)
-			   in_client = z->in_client;
+			in_client = z->in_client;
+			SDL_GL_MakeCurrent(z->window, z->my_context);
 		 }
 
-		 if (stbwingraph_primary_window)
-		 {
-			 stbwingraph_SetGLWindow(stbwingraph_primary_window);
-		 }
-		 n = loopmode(stbwingraph_GetTimestep(mintime), real, in_client);
+		float elapsedTime;
+		double thisTime;
+
+		if (lastTime == -1)
+		  lastTime = SDL_GetTicks() / 1000.0 - mintime;
+
+		for(;;) {
+			SDL_Delay(5);
+			thisTime = SDL_GetTicks() / 1000.0;
+			elapsedTime = (float) (thisTime - lastTime);
+			if (elapsedTime >= mintime) {
+				lastTime = thisTime;
+				break;
+			}
+		}
+
+		 n = loopmode(elapsedTime, real, in_client);
 		 if (n == STBWINGRAPH_update_exit)
 			return 0; // update_quit
 
 		 is_animating = (n != STBWINGRAPH_update_pause);
 
-		 needs_drawing = FALSE;
+		 needs_drawing = false;
 	  }
 	}
 

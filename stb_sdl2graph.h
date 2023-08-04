@@ -25,12 +25,6 @@
    #endif
 #endif
 
-#ifdef __cplusplus
-#define STB_EXTERN extern "C"
-#else
-#define STB_EXTERN
-#endif
-
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 
@@ -40,14 +34,7 @@
 #include <time.h>
 #include <string.h>
 #include <assert.h>
-#endif
-
-#ifndef TRUE
-#define TRUE 1
-#endif
-
-#ifndef FALSE
-#define FALSE 0
+#include <stdbool.h>
 #endif
 
 typedef void * stbwingraph_hwnd;
@@ -111,66 +98,14 @@ typedef struct
 
 typedef int (*stbwingraph_window_proc)(void *data, stbwingraph_event *event);
 
-extern stbwingraph_hinstance   stbwingraph_app;
 extern stbwingraph_hwnd        stbwingraph_primary_window;
-extern int                     stbwingraph_request_fullscreen;
-extern int                     stbwingraph_request_windowed;
-
-STB_EXTERN void stbwingraph_ods(char *str, ...);
-STB_EXTERN int stbwingraph_MessageBox(stbwingraph_hwnd win, unsigned int type,
-                                              char *caption, char *text, ...);
-STB_EXTERN int stbwingraph_ChangeResolution(unsigned int w, unsigned int h,
-                                      unsigned int bits, int use_message_box);
-STB_EXTERN int stbwingraph_SetPixelFormat(stbwingraph_hwnd win, int color_bits,
-            int alpha_bits, int depth_bits, int stencil_bits, int accum_bits);
-STB_EXTERN int stbwingraph_DefineClass(void *hinstance, char *iconname);
-STB_EXTERN void stbwingraph_SwapBuffers(void *win);
-
-STB_EXTERN void stbwingraph_MakeFonts(void *window, int font_base);
-STB_EXTERN float stbwingraph_GetTimestep(float minimum_time);
-STB_EXTERN void stbwingraph_SetGLWindow(void *win);
+extern bool                    stbwingraph_request_fullscreen;
+extern bool                    stbwingraph_request_windowed;
 
 #ifdef STB_DEFINE
-stbwingraph_hinstance   stbwingraph_app;
 stbwingraph_hwnd        stbwingraph_primary_window;
-int stbwingraph_request_fullscreen;
-int stbwingraph_request_windowed;
-
-void stbwingraph_ods(char *str, ...)
-{
-   va_list v;
-   va_start(v,str);
-   vfprintf(stderr, str, v);
-   va_end(v);
-}
-
-int stbwingraph_MessageBox(stbwingraph_hwnd win, unsigned int type, char *caption, char *text, ...)
-{
-   va_list v;
-   char buffer[1024];
-   va_start(v, text);
-   vsprintf(buffer, text, v);
-   va_end(v);
-   return SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, buffer, win);
-}
-
-static void stbwingraph_ResetResolution(void)
-{
-    /* STUB: SDL ties resolution to a window, and resets automatically. */
-}
-
-static void stbwingraph_RegisterResetResolution(void)
-{
-    /* STUB: As above, SDL does not need this. */
-}
-
-int stbwingraph_ChangeResolution(unsigned int w, unsigned int h, unsigned int bits, int use_message_box)
-{
-}
-
-int stbwingraph_SetPixelFormat(stbwingraph_hwnd win, int color_bits, int alpha_bits, int depth_bits, int stencil_bits, int accum_bits)
-{
-}
+bool stbwingraph_request_fullscreen;
+bool stbwingraph_request_windowed;
 
 typedef struct
 {
@@ -189,15 +124,6 @@ typedef struct
    int   did_share_lists;
    int   mx,my; // last mouse positions
 } stbwingraph__window;
-
-static void stbwingraph__inclient(stbwingraph__window *win, int state)
-{
-   if (state != win->in_client) {
-      win->in_client = state;
-      if (win->hide_mouse)
-         SDL_ShowCursor(!state);
-   }
-}
 
 static void stbwingraph__key(stbwingraph_event *e, int type, int key, stbwingraph__window *z)
 {
@@ -239,50 +165,8 @@ static void stbwingraph__mouse(stbwingraph_event *e, int type, int x, int y, int
    }
 }
 
-float stbwingraph_GetTimestep(float minimum_time)
-{
-   float elapsedTime;
-   double thisTime;
-   static double lastTime = -1;
-
-   if (lastTime == -1)
-      lastTime = SDL_GetTicks() / 1000.0 - minimum_time;
-
-   for(;;) {
-      thisTime = SDL_GetTicks() / 1000.0;
-      elapsedTime = (float) (thisTime - lastTime);
-      if (elapsedTime >= minimum_time) {
-         lastTime = thisTime;
-         return elapsedTime;
-      }
-      #if 1
-      SDL_Delay(5);
-      #endif
-   }
-}
-
-void stbwingraph_SetGLWindow(void *win)
-{
-   stbwingraph__window *z = (stbwingraph__window *) win;
-   if (z)
-      SDL_GL_MakeCurrent(z->window, z->my_context);
-}
-
-void stbwingraph_MakeFonts(void *window, int font_base)
-{
-   stbwingraph_ods("WARNING: MakeFonts not supported in SDL2\n");
-}
-
-void stbwingraph_SwapBuffers(void *win)
-{
-   stbwingraph__window *z;
-   if (win == NULL) win = stbwingraph_primary_window;
-   z = (stbwingraph__window *) win;
-   SDL_GL_SwapWindow(z->window);
-}
 #endif
 
-#undef STB_EXTERN
 #ifdef STB_WINGRAPH_DISABLE_DEFINE_AT_END
 #undef STB_DEFINE
 #endif
