@@ -2006,17 +2006,7 @@ int winproc(void *data, stbwingraph_event *e)
          break;
 
       case STBWGE_char:
-         switch(e->key) {
-#if 0
-            case 27:
-               stbwingraph_ShowCursor(NULL,1);
-                  return STBWINGRAPH_winproc_exit;
-               break;
-#endif
-            default:
-               queued_key = e->key;
-               break;
-         }
+         queued_key = e->key;
          break;
 
       case STBWGE_destroy:
@@ -2058,18 +2048,259 @@ int winproc(void *data, stbwingraph_event *e)
    return 0;
 }
 
-void stbwingraph_main(void)
+int main(int argc, char **argv)
 {
-   stbwingraph_Priority(2);
-   stbwingraph_CreateWindow(1, winproc, NULL, APPNAME, SCREEN_X,SCREEN_Y, 0, 1, 0, 0);
-   stbwingraph_ShowCursor(NULL, 0);
+	// handle command line parameters
+	int i;
+	for (i = 1; i < argc; ++i)
+	{
+		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed")))
+		{
+			stbwingraph_request_windowed = TRUE;
+		}
+		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen")))
+		{
+			stbwingraph_request_fullscreen = TRUE;
+		}
+	}
 
-   init_graphics();
+	// create window
+	// z variable to be removed in the future
+	stbwingraph__window *z = (stbwingraph__window *) malloc(sizeof(*z));
 
-   restart_game(); // necessary to populate the edge table on restore
-   load_game();
-   if (game_started)
-      menu_selection = 0;
-   initialized = 1;
-   stbwingraph_MainLoop(loopmode, 0.016f);   // 30 fps = 0.033
+	memset(z, 0, sizeof(*z));
+	z->color = 24;
+	z->depth = 24;
+	z->alpha = 0;
+	z->stencil = 0;
+	z->func = winproc;
+	z->data = NULL;
+	z->mx = -(1 << 30);
+	z->my = 0;
+
+	int fullscreen = 0;
+	if (stbwingraph_request_windowed)
+		fullscreen = FALSE;
+	else if (stbwingraph_request_fullscreen)
+		fullscreen = TRUE;
+
+	z->window = SDL_CreateWindow(APPNAME,
+					  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_X, SCREEN_Y,
+					  (fullscreen?SDL_WINDOW_FULLSCREEN:0) |
+					  SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+
+	SDL_SetWindowData(z->window, "stbptr", z);
+
+	z->my_context = SDL_GL_CreateContext(z->window);
+
+	if (stbwingraph_primary_window)
+	{
+		stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
+		SDL_DestroyWindow(z->window);
+		free(z);
+		stbwingraph_primary_window = NULL;
+	}
+	stbwingraph_primary_window = z;
+
+	{
+	  stbwingraph_event e = { STBWGE_create };
+	  e.did_share_lists = z->did_share_lists;
+	  e.handle = z;
+	  if (winproc(NULL, &e) != STBWINGRAPH_do_not_show)
+	  {
+		stbwingraph_event e = { STBWGE_create_postshow };
+		SDL_ShowWindow(z->window);
+		e.handle = z;
+		z->func(z->data, &e);
+	  }
+	}
+
+	/*
+	 * SDL doesn't sent a SIZE event when the window is created, so send one.
+	 */
+	{
+		stbwingraph_event e = { STBWGE_size };
+		e.width = SCREEN_X;
+		e.height = SCREEN_Y;
+		e.handle = z;
+		winproc(NULL, &e);
+	}
+	// cw ---
+
+	((stbwingraph__window *)stbwingraph_primary_window)->hide_mouse = 1;
+	if (((stbwingraph__window *)stbwingraph_primary_window)->in_client)
+		SDL_ShowCursor(SDL_FALSE);
+
+	init_graphics();
+
+	restart_game(); // necessary to populate the edge table on restore
+	load_game();
+	if (game_started)
+	  menu_selection = 0;
+	initialized = 1;
+
+	// event loop
+	int needs_drawing = FALSE;
+	int stbwingraph_force_update = FALSE;
+	SDL_Event msg;
+
+	int is_animating = TRUE;
+	float mintime = 0.016f;
+
+	for(;;) {
+	  int n;
+
+	  // wait for a message if: (a) we're animating and there's already a message
+	  // or (b) we're not animating
+
+	  SDL_PumpEvents();
+
+	  if (!is_animating || SDL_PeepEvents(&msg, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
+		 stbwingraph_force_update = FALSE;
+
+		 while (SDL_PollEvent(&msg))
+		 {
+			stbwingraph_event e = { STBWGE__none };
+			stbwingraph__window *z;
+
+			switch (msg.type)
+			{
+			   case SDL_QUIT:
+				  return 0;
+			   case SDL_WINDOWEVENT:
+				  switch (msg.window.event)
+				  {
+					 case SDL_WINDOWEVENT_CLOSE:
+						e.type = STBWGE_destroy;
+						e.handle = SDL_GetWindowData(SDL_GetWindowFromID(msg.window.windowID),"stbptr");
+								z = (stbwingraph__window*)e.handle;
+						if (z && z->func)
+						   z->func(z->data, &e);
+						if (e.handle == stbwingraph_primary_window)
+						   return 0;
+						break;
+					 case SDL_WINDOWEVENT_RESIZED:
+							case SDL_WINDOWEVENT_SIZE_CHANGED:
+						e.type = STBWGE_size;
+						e.handle = SDL_GetWindowData(SDL_GetWindowFromID(msg.window.windowID),"stbptr");
+						e.width = msg.window.data1;
+						e.height = msg.window.data2;
+								z = (stbwingraph__window*)e.handle;
+						if (z && z->func)
+						   z->func(e.handle, &e);
+						break;
+				   }
+					case SDL_MOUSEMOTION:
+						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.motion.windowID), "stbptr");
+						stbwingraph__mouse(&e, STBWGE_mousemove, msg.motion.x, msg.motion.y, 0, z, z);
+						e.handle = z;
+						if (z && z->func)
+							n = z->func(z->data, &e);
+						if (n == STBWINGRAPH_winproc_update)
+							stbwingraph_force_update = TRUE;
+						break;
+					case SDL_MOUSEBUTTONDOWN:
+					case SDL_MOUSEBUTTONUP:
+						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.motion.windowID), "stbptr");
+						if (msg.type == SDL_MOUSEBUTTONDOWN)
+						{
+							if (msg.button.button == SDL_BUTTON_LEFT) e.type = STBWGE_leftdown;
+							else if (msg.button.button == SDL_BUTTON_RIGHT) e.type = STBWGE_rightdown;
+							else if (msg.button.button == SDL_BUTTON_MIDDLE) e.type = STBWGE_middledown;
+						}
+						else
+						{
+							if (msg.button.button == SDL_BUTTON_LEFT) e.type = STBWGE_leftup;
+							else if (msg.button.button == SDL_BUTTON_RIGHT) e.type = STBWGE_rightup;
+							else if (msg.button.button == SDL_BUTTON_MIDDLE) e.type = STBWGE_middleup;
+						}
+
+						stbwingraph__mouse(&e, e.type, msg.button.x, msg.button.y, 0, z, z);
+						e.handle = z;
+						if (z && z->func)
+							n = z->func(z->data, &e);
+						if (n == STBWINGRAPH_winproc_update)
+							stbwingraph_force_update = TRUE;
+						break;
+					case SDL_KEYDOWN:
+					case SDL_KEYUP:
+						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.key.windowID), "stbptr");
+						stbwingraph__key(&e, (msg.type == SDL_KEYDOWN)?STBWGE_keydown:STBWGE_keyup, msg.key.keysym.sym, z);
+						e.handle = z;
+						if (z && z->func)
+							n = z->func(z->data, &e);
+						if (n == STBWINGRAPH_winproc_update)
+							stbwingraph_force_update = TRUE;
+						/* We emulate WM_CHAR events, as SDL2's text input API is clearly overdoing it */
+						if (msg.type == SDL_KEYDOWN && msg.key.keysym.sym < 0x40000000)
+						{
+							stbwingraph_event ce = { STBWGE__none };
+							stbwingraph__key(&ce, STBWGE_char, msg.key.keysym.sym, z);
+							ce.handle = z;
+							if (z && z->func)
+								n = z->func(z->data, &ce);
+							if (n == STBWINGRAPH_winproc_update)
+								stbwingraph_force_update = TRUE;
+						}
+						break;
+
+			 }
+		 // only force a draw for certain messages...
+		 // if I don't do this, we peg at 50% for some reason... must
+		 // be a bug somewhere, because we peg at 100% when rendering...
+		 // very weird... looks like NVIDIA is pumping some messages
+		 // through our pipeline? well, ok, I guess if we can get
+		 // non-user-generated messages we have to do this
+		 if (!stbwingraph_force_update) {
+			switch (msg.type) {
+			   case SDL_MOUSEMOTION:
+			  break;
+			   case SDL_TEXTEDITING:
+			   case SDL_TEXTINPUT:
+			   case SDL_KEYDOWN:
+			   case SDL_KEYUP:
+			   case SDL_MOUSEBUTTONDOWN:
+			   case SDL_MOUSEBUTTONUP:
+			   case SDL_WINDOWEVENT:
+			  needs_drawing = TRUE;
+			  break;
+			}
+		 } else
+			needs_drawing = TRUE;
+		  }
+	  }
+
+	  // if another message, process that first
+	  // @TODO: i don't think this is working, because I can't key ahead
+	  // in the SVT demo app
+	  if (SDL_PeepEvents(&msg, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT))
+		 continue;
+
+	  // and now call update
+	  if (needs_drawing || is_animating) {
+		 int real=1, in_client=1;
+		 if (stbwingraph_primary_window) {
+			stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
+			if (z && !z->active) {
+			   real = 0;
+			}
+			if (z)
+			   in_client = z->in_client;
+		 }
+
+		 if (stbwingraph_primary_window)
+		 {
+			 stbwingraph_SetGLWindow(stbwingraph_primary_window);
+		 }
+		 n = loopmode(stbwingraph_GetTimestep(mintime), real, in_client);
+		 if (n == STBWINGRAPH_update_exit)
+			return 0; // update_quit
+
+		 is_animating = (n != STBWINGRAPH_update_pause);
+
+		 needs_drawing = FALSE;
+	  }
+	}
+
+	return 0;
 }
