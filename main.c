@@ -13,31 +13,28 @@
 
 #define TIME_SCALE 3//2.5
 
-
 #define APPNAME "PROMESST"
 
 // default screen size, and required aspect ratio
 #define SCREEN_X  1024
 #define SCREEN_Y  768
 
-#pragma warning(disable:4244; disable:4305; disable:4018)
-
 #include <stdbool.h>
 #include <assert.h>
 #include <ctype.h>
-#define STB_DEFINE
-#define STB_WINMAIN
-#ifdef TARGET_OS_WIN32
-#include "stb_wingraph.h"
-#else
-#include "stb_sdl2graph.h"
 #include <sys/stat.h>
-#endif
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096 // This'll work on OSX as well, in theory.
 #endif
+
+#define STB_DEFINE
 #include "stb_image.c"  // before stb_gl so we get stbgl_LoadImage support
 #include "stb_gl.h"
+#undef STB_DEFINE
+
+SDL_Window *main_window = NULL;
+SDL_GLContext gl_context = NULL;
 
 static int screen_x, screen_y;
 static int tex;
@@ -1960,22 +1957,15 @@ void draw()
 {
    draw_init();
    draw_world();
-
-   stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
-   SDL_GL_SwapWindow(z->window);
+   SDL_GL_SwapWindow(main_window);
 }
 
-static int initialized=0;
 static float last_dt;
 
-int active;
-
-int loopmode(float dt, int real, int in_client)
+int loopmode(float dt)
 {
    uint eff_time;
    float actual_dt = dt;
-
-   if (!initialized) return 0;
 
    animcycle += (uint) ((dt) * 1000 * TIME_SCALE);
 
@@ -1991,63 +1981,6 @@ int loopmode(float dt, int real, int in_client)
       timestep(eff_time);
    }
 
-   if (active || !real)
-      draw();
-
-#ifdef _DEBUG
-   return 0;
-#else
-   return active ? 0 : STBWINGRAPH_update_pause;
-#endif
-}
-
-int winproc(void *data, stbwingraph_event *e)
-{
-   switch (e->type) {
-      case STBWGE_create:
-         active = 1;
-         break;
-
-      case STBWGE_char:
-         queued_key = e->key;
-         break;
-
-      case STBWGE_destroy:
-         save_game();
-         break;
-
-      case STBWGE_keydown:
-         switch (e->key) {
-            case SDLK_DOWN : queued_key = 's'; break;
-            case SDLK_LEFT : queued_key = 'a'; break;
-            case SDLK_RIGHT: queued_key = 'd'; break;
-            case SDLK_UP   : queued_key = 'w'; break;
-         }
-         break;
-      case STBWGE_keyup:
-         break;
-
-      case STBWGE_deactivate:
-         active = 0;
-         break;
-      case STBWGE_activate:
-         active = 1;
-         break;
-
-      case STBWGE_size:
-         screen_x = e->width;
-         screen_y = e->height;
-         loopmode(0,1,0);
-         break;
-
-      case STBWGE_draw:
-         if (initialized)
-            loopmode(0,1,0);
-         break;
-
-      default:
-         return STBWINGRAPH_unprocessed;
-   }
    return 0;
 }
 
@@ -2055,84 +1988,33 @@ int main(int argc, char **argv)
 {
 	// handle command line parameters
 	int i;
+	bool fullscreen = false;
 	for (i = 1; i < argc; ++i)
 	{
 		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed")))
 		{
-			stbwingraph_request_windowed = true;
+			fullscreen = false;
 		}
 		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen")))
 		{
-			stbwingraph_request_fullscreen = true;
+			fullscreen = true;
 		}
 	}
 
 	// create window
-	// z variable to be removed in the future
-	stbwingraph__window *z = (stbwingraph__window *) malloc(sizeof(*z));
+	main_window = SDL_CreateWindow(APPNAME,
+	  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_X, SCREEN_Y,
+	  (fullscreen?SDL_WINDOW_FULLSCREEN:0) |
+	  SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
 
-	memset(z, 0, sizeof(*z));
-	z->color = 24;
-	z->depth = 24;
-	z->alpha = 0;
-	z->stencil = 0;
-	z->func = winproc;
-	z->data = NULL;
-	z->mx = -(1 << 30);
-	z->my = 0;
+	gl_context = SDL_GL_CreateContext(main_window);
 
-	bool fullscreen = 0;
-	if (stbwingraph_request_windowed)
-		fullscreen = false;
-	else if (stbwingraph_request_fullscreen)
-		fullscreen = true;
+	SDL_ShowWindow(main_window);
 
-	z->window = SDL_CreateWindow(APPNAME,
-					  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_X, SCREEN_Y,
-					  (fullscreen?SDL_WINDOW_FULLSCREEN:0) |
-					  SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+	screen_x = SCREEN_X;
+	screen_y = SCREEN_Y;
 
-	SDL_SetWindowData(z->window, "stbptr", z);
-
-	z->my_context = SDL_GL_CreateContext(z->window);
-
-	if (stbwingraph_primary_window)
-	{
-		stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
-		SDL_DestroyWindow(z->window);
-		free(z);
-		stbwingraph_primary_window = NULL;
-	}
-	stbwingraph_primary_window = z;
-
-	{
-	  stbwingraph_event e = { STBWGE_create };
-	  e.did_share_lists = z->did_share_lists;
-	  e.handle = z;
-	  if (winproc(NULL, &e) != STBWINGRAPH_do_not_show)
-	  {
-		stbwingraph_event e = { STBWGE_create_postshow };
-		SDL_ShowWindow(z->window);
-		e.handle = z;
-		z->func(z->data, &e);
-	  }
-	}
-
-	/*
-	 * SDL doesn't sent a SIZE event when the window is created, so send one.
-	 */
-	{
-		stbwingraph_event e = { STBWGE_size };
-		e.width = SCREEN_X;
-		e.height = SCREEN_Y;
-		e.handle = z;
-		winproc(NULL, &e);
-	}
-	// cw ---
-
-	((stbwingraph__window *)stbwingraph_primary_window)->hide_mouse = 1;
-	if (((stbwingraph__window *)stbwingraph_primary_window)->in_client)
-		SDL_ShowCursor(SDL_FALSE);
+	SDL_ShowCursor(SDL_FALSE);
 
 	init_graphics();
 
@@ -2140,157 +2022,52 @@ int main(int argc, char **argv)
 	load_game();
 	if (game_started)
 	  menu_selection = 0;
-	initialized = 1;
 
 	// event loop
-	bool needs_drawing = false;
-	bool stbwingraph_force_update = false;
 	SDL_Event msg;
 
-	bool is_animating = true;
 	float mintime = 0.016f;
 	double lastTime = -1;
 
-	for(;;) {
-	  int n;
-
-	  // wait for a message if: (a) we're animating and there's already a message
-	  // or (b) we're not animating
-
-	  SDL_PumpEvents();
-
-	  if (!is_animating || SDL_PeepEvents(&msg, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
-		 stbwingraph_force_update = false;
-
+	for (;;) {
 		while (SDL_PollEvent(&msg))
 		{
-			stbwingraph_event e = { STBWGE__none };
-			stbwingraph__window *z;
-
 			switch (msg.type)
 			{
-			   case SDL_QUIT:
+				case SDL_QUIT:
 				  return 0;
-			   case SDL_WINDOWEVENT:
-				  switch (msg.window.event)
-				  {
-					 case SDL_WINDOWEVENT_CLOSE:
-						e.type = STBWGE_destroy;
-						e.handle = SDL_GetWindowData(SDL_GetWindowFromID(msg.window.windowID),"stbptr");
-								z = (stbwingraph__window*)e.handle;
-						if (z && z->func)
-						   z->func(z->data, &e);
-						if (e.handle == stbwingraph_primary_window)
-						   return 0;
+				case SDL_WINDOWEVENT:
+					switch (msg.window.event)
+					{
+						case SDL_WINDOWEVENT_CLOSE:
+							save_game();
+							return 0;
+						case SDL_WINDOWEVENT_RESIZED:
+						case SDL_WINDOWEVENT_SIZE_CHANGED:
+							screen_x = msg.window.data1;
+							screen_y = msg.window.data2;
+							loopmode(0);
 						break;
-					 case SDL_WINDOWEVENT_RESIZED:
-							case SDL_WINDOWEVENT_SIZE_CHANGED:
-						e.type = STBWGE_size;
-						e.handle = SDL_GetWindowData(SDL_GetWindowFromID(msg.window.windowID),"stbptr");
-						e.width = msg.window.data1;
-						e.height = msg.window.data2;
-								z = (stbwingraph__window*)e.handle;
-						if (z && z->func)
-						   z->func(e.handle, &e);
-						break;
-				   }
-					case SDL_MOUSEMOTION:
-						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.motion.windowID), "stbptr");
-						stbwingraph__mouse(&e, STBWGE_mousemove, msg.motion.x, msg.motion.y, 0, z, z);
-						e.handle = z;
-						if (z && z->func)
-							n = z->func(z->data, &e);
-						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = true;
-						break;
-					case SDL_MOUSEBUTTONDOWN:
-					case SDL_MOUSEBUTTONUP:
-						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.motion.windowID), "stbptr");
-						if (msg.type == SDL_MOUSEBUTTONDOWN)
-						{
-							if (msg.button.button == SDL_BUTTON_LEFT) e.type = STBWGE_leftdown;
-							else if (msg.button.button == SDL_BUTTON_RIGHT) e.type = STBWGE_rightdown;
-							else if (msg.button.button == SDL_BUTTON_MIDDLE) e.type = STBWGE_middledown;
-						}
-						else
-						{
-							if (msg.button.button == SDL_BUTTON_LEFT) e.type = STBWGE_leftup;
-							else if (msg.button.button == SDL_BUTTON_RIGHT) e.type = STBWGE_rightup;
-							else if (msg.button.button == SDL_BUTTON_MIDDLE) e.type = STBWGE_middleup;
-						}
-
-						stbwingraph__mouse(&e, e.type, msg.button.x, msg.button.y, 0, z, z);
-						e.handle = z;
-						if (z && z->func)
-							n = z->func(z->data, &e);
-						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = true;
-						break;
-					case SDL_KEYDOWN:
-					case SDL_KEYUP:
-						z = (stbwingraph__window*) SDL_GetWindowData(SDL_GetWindowFromID(msg.key.windowID), "stbptr");
-						stbwingraph__key(&e, (msg.type == SDL_KEYDOWN)?STBWGE_keydown:STBWGE_keyup, msg.key.keysym.sym, z);
-						e.handle = z;
-						if (z && z->func)
-							n = z->func(z->data, &e);
-						if (n == STBWINGRAPH_winproc_update)
-							stbwingraph_force_update = true;
-						/* We emulate WM_CHAR events, as SDL2's text input API is clearly overdoing it */
-						if (msg.type == SDL_KEYDOWN && msg.key.keysym.sym < 0x40000000)
-						{
-							stbwingraph_event ce = { STBWGE__none };
-							stbwingraph__key(&ce, STBWGE_char, msg.key.keysym.sym, z);
-							ce.handle = z;
-							if (z && z->func)
-								n = z->func(z->data, &ce);
-							if (n == STBWINGRAPH_winproc_update)
-								stbwingraph_force_update = true;
-						}
-						break;
+					} break;
+				case SDL_KEYDOWN:
+					switch (msg.key.keysym.sym) {
+						case SDLK_DOWN : queued_key = 's'; break;
+						case SDLK_LEFT : queued_key = 'a'; break;
+						case SDLK_RIGHT: queued_key = 'd'; break;
+						case SDLK_UP   : queued_key = 'w'; break;
+					}
+					/* We emulate WM_CHAR events, as SDL2's text input API is clearly overdoing it */
+					if (msg.key.keysym.sym < SDLK_SCANCODE_MASK)
+					{
+						queued_key = msg.key.keysym.sym;
+					}
+					break;
 
 			 }
-		 // only force a draw for certain messages...
-		 // if I don't do this, we peg at 50% for some reason... must
-		 // be a bug somewhere, because we peg at 100% when rendering...
-		 // very weird... looks like NVIDIA is pumping some messages
-		 // through our pipeline? well, ok, I guess if we can get
-		 // non-user-generated messages we have to do this
-		 if (!stbwingraph_force_update) {
-			switch (msg.type) {
-			   case SDL_MOUSEMOTION:
-			  break;
-			   case SDL_TEXTEDITING:
-			   case SDL_TEXTINPUT:
-			   case SDL_KEYDOWN:
-			   case SDL_KEYUP:
-			   case SDL_MOUSEBUTTONDOWN:
-			   case SDL_MOUSEBUTTONUP:
-			   case SDL_WINDOWEVENT:
-			  needs_drawing = true;
-			  break;
-			}
-		 } else
-			needs_drawing = true;
-		  }
-	  }
+		}
 
-	  // if another message, process that first
-	  // @TODO: i don't think this is working, because I can't key ahead
-	  // in the SVT demo app
-	  if (SDL_PeepEvents(&msg, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT))
-		 continue;
-
-	  // and now call update
-	  if (needs_drawing || is_animating) {
-		 int real=1, in_client=1;
-		 if (stbwingraph_primary_window) {
-			stbwingraph__window *z = (stbwingraph__window *) stbwingraph_primary_window;
-			if (!z->active) {
-			   real = 0;
-			}
-			in_client = z->in_client;
-			SDL_GL_MakeCurrent(z->window, z->my_context);
-		 }
+		// and now call update
+		SDL_GL_MakeCurrent(main_window, gl_context);
 
 		float elapsedTime;
 		double thisTime;
@@ -2307,15 +2084,8 @@ int main(int argc, char **argv)
 				break;
 			}
 		}
-
-		 n = loopmode(elapsedTime, real, in_client);
-		 if (n == STBWINGRAPH_update_exit)
-			return 0; // update_quit
-
-		 is_animating = (n != STBWINGRAPH_update_pause);
-
-		 needs_drawing = false;
-	  }
+		loopmode(elapsedTime);
+		draw();
 	}
 
 	return 0;
