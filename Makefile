@@ -1,3 +1,3 @@
-LFLAGS = -lm -lGL -lGLU -lSDL2main -lSDL2
+LFLAGS = -lm -lGL -lGLU -lSDLmain -lSDL
 
 include common.mk

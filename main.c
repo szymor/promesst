@@ -11,30 +11,27 @@
 //
 // 2013-02-26   7:20 pm -  7:30 pm              fixed bug in checkpoint save-to-disk
 
-#define TIME_SCALE 3//2.5
-
-#define APPNAME "PROMESST"
-
-// default screen size, and required aspect ratio
-#define SCREEN_X  1024
-#define SCREEN_Y  768
-
 #include <stdbool.h>
 #include <assert.h>
 #include <ctype.h>
 #include <sys/stat.h>
-
-#ifndef PATH_MAX
-#define PATH_MAX 4096 // This'll work on OSX as well, in theory.
-#endif
 
 #define STB_DEFINE
 #include "stb_image.c"  // before stb_gl so we get stbgl_LoadImage support
 #include "stb_gl.h"
 #undef STB_DEFINE
 
-SDL_Window *main_window = NULL;
-SDL_GLContext gl_context = NULL;
+#define TIME_SCALE 1
+
+#define APPNAME "PROMESST"
+
+// default screen size, and required aspect ratio
+#define SCREEN_X  640
+#define SCREEN_Y  480
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096 // This'll work on OSX as well, in theory.
+#endif
 
 static int screen_x, screen_y;
 static int tex;
@@ -1144,13 +1141,13 @@ gamestate loaded_game;
 
 static char *get_savegame_path(void)
 {
-	char *root_dir = SDL_getenv("XDG_DATA_HOME");
+	char *root_dir = getenv("XDG_DATA_HOME");
 	static bool gotpath = false;
 	static char save_dir[PATH_MAX] = {0};
 	if (gotpath) return save_dir;
 	if (!root_dir)
 	{
-		root_dir = SDL_getenv("HOME");
+		root_dir = getenv("HOME");
 		if (!root_dir)
 		{
 			strcpy(save_dir, "data/save.dat");
@@ -1957,7 +1954,7 @@ void draw()
 {
    draw_init();
    draw_world();
-   SDL_GL_SwapWindow(main_window);
+   SDL_GL_SwapBuffers();
 }
 
 static float last_dt;
@@ -1991,25 +1988,22 @@ int main(int argc, char **argv)
 	bool fullscreen = false;
 	for (i = 1; i < argc; ++i)
 	{
-		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed")))
+		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed") == 0))
 		{
 			fullscreen = false;
 		}
-		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen")))
+		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen") == 0))
 		{
 			fullscreen = true;
 		}
 	}
 
 	// create window
-	main_window = SDL_CreateWindow(APPNAME,
-	  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_X, SCREEN_Y,
-	  (fullscreen?SDL_WINDOW_FULLSCREEN:0) |
-	  SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-
-	gl_context = SDL_GL_CreateContext(main_window);
-
-	SDL_ShowWindow(main_window);
+	SDL_SetVideoMode(SCREEN_X, SCREEN_Y, 32,
+		(fullscreen ? SDL_FULLSCREEN : 0) |
+		SDL_RESIZABLE | SDL_OPENGL);
+	SDL_WM_SetCaption(APPNAME, NULL);
+	SDL_EnableKeyRepeat(1, 200);
 
 	screen_x = SCREEN_X;
 	screen_y = SCREEN_Y;
@@ -2035,20 +2029,13 @@ int main(int argc, char **argv)
 			switch (msg.type)
 			{
 				case SDL_QUIT:
+				  save_game();
 				  return 0;
-				case SDL_WINDOWEVENT:
-					switch (msg.window.event)
-					{
-						case SDL_WINDOWEVENT_CLOSE:
-							save_game();
-							return 0;
-						case SDL_WINDOWEVENT_RESIZED:
-						case SDL_WINDOWEVENT_SIZE_CHANGED:
-							screen_x = msg.window.data1;
-							screen_y = msg.window.data2;
-							loopmode(0);
-						break;
-					} break;
+				case SDL_VIDEORESIZE:
+					screen_x = msg.resize.w;
+					screen_y = msg.resize.h;
+					loopmode(0);
+					break;
 				case SDL_KEYDOWN:
 					switch (msg.key.keysym.sym) {
 						case SDLK_DOWN : queued_key = 's'; break;
@@ -2056,8 +2043,7 @@ int main(int argc, char **argv)
 						case SDLK_RIGHT: queued_key = 'd'; break;
 						case SDLK_UP   : queued_key = 'w'; break;
 					}
-					/* We emulate WM_CHAR events, as SDL2's text input API is clearly overdoing it */
-					if (msg.key.keysym.sym < SDLK_SCANCODE_MASK)
+					if (msg.key.keysym.sym < 128)
 					{
 						queued_key = msg.key.keysym.sym;
 					}
@@ -2067,8 +2053,6 @@ int main(int argc, char **argv)
 		}
 
 		// and now call update
-		SDL_GL_MakeCurrent(main_window, gl_context);
-
 		float elapsedTime;
 		double thisTime;
 
