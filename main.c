@@ -20,21 +20,22 @@
 #include "stb_image.c"  // before stb_gl so we get stbgl_LoadImage support
 #include "stb_gl.h"
 #undef STB_DEFINE
+#include <SDL/SDL_image.h>
 
 #define TIME_SCALE 1
 
 #define APPNAME "PROMESST"
 
 // default screen size, and required aspect ratio
-#define SCREEN_X  640
-#define SCREEN_Y  480
+#define SCREEN_X  320
+#define SCREEN_Y  240
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096 // This'll work on OSX as well, in theory.
 #endif
 
 static int screen_x, screen_y;
-static int tex;
+static SDL_Surface *screen = NULL;
 
 // red green blue orange yellow violet cyan pink
 
@@ -66,17 +67,26 @@ typedef struct
 color powers[8];
 uint8 *colordata;
 
-static int sss_tex, title_tex;
+static SDL_Surface *sss_tex = NULL;
+static SDL_Surface *title_tex = NULL;
+static SDL_Surface *tex = NULL;
 
 void init_graphics(void)
 {
-   int w,h,i;
-   colordata = stbi_load("data/sprites.png", &w,&h,0,0);
-   tex = stbgl_TexImage2D(0, w,h, colordata, "n");
-   for (i=0; i < 8; ++i)
+   //int w,h,i;
+   //colordata = stbi_load("data/sprites.png", &w,&h,0,0);
+   //tex = stbgl_TexImage2D(0, w,h, colordata, "n");
+   //for (i=0; i < 8; ++i)
+      //memcpy(&powers[i].r, colordata+96*128*4 + (112+i)*4, 4);
+   tex = IMG_Load("data/sprites.png");
+   colordata = (uint8 *)tex->pixels;
+   for (int i = 0; i < 8; ++i)
+   {
       memcpy(&powers[i].r, colordata+96*128*4 + (112+i)*4, 4);
-   title_tex = stbgl_LoadTexture("data/title.png", "n");
-   sss_tex = stbgl_LoadTexture("data/sss_logo.png", "n");
+   }
+   title_tex = IMG_Load("data/title.png");
+   sss_tex = IMG_Load("data/sss_logo.png");
+   SDL_SetColorKey(sss_tex, SDL_SRCCOLORKEY, 0);
 }
 
 void get_map_color(color *c, int x, int y, int z)
@@ -1097,21 +1107,21 @@ struct {
    char *text;
 } credits[] =
 {
-   COLOR_red, 3, "INSPIRED BY",
+   COLOR_red, 1, "INSPIRED BY",
    0,0.5,0,
-   COLOR_teal,4, "THE GAMES OF",
-   COLOR_teal,4, "MICHAEL BROUGH",
-   0,3.0,0,
-   COLOR_green, 3, "PLAYTEST BY",
+   COLOR_teal,2, "THE GAMES OF",
+   COLOR_teal,2, "MICHAEL BROUGH",
    0,0.5,0,
-   COLOR_violet, 4, "ZACH SAMUELS",
-   COLOR_violet, 4, "ADMIRAL JOTA",
-   COLOR_violet, 4, "CASEY MURATORI",
-   COLOR_violet, 4, "JONATHAN BLOW",
-   0,3.0,0,
-   COLOR_blue, 3, "GAME BY",
+   COLOR_green, 1, "PLAYTEST BY",
    0,0.5,0,
-   COLOR_yellow, 4, "SEAN BARRETT",
+   COLOR_violet, 2, "ZACH SAMUELS",
+   COLOR_violet, 2, "ADMIRAL JOTA",
+   COLOR_violet, 2, "CASEY MURATORI",
+   COLOR_violet, 2, "JONATHAN BLOW",
+   0,0.5,0,
+   COLOR_blue, 1, "GAME BY",
+   0,0.5,0,
+   COLOR_yellow, 2, "SEAN BARRETT",
 };
 #define NUM_CREDITS  (sizeof(credits)/sizeof(credits[0]))
 
@@ -1297,43 +1307,7 @@ int draw_initialized=0;
 void draw_init(void)
 {
    draw_initialized = 1;
-
-//   glEnable(GL_CULL_FACE);
-   glDisable(GL_TEXTURE_2D);
-   glDisable(GL_LIGHTING);
-   glDisable(GL_DEPTH_TEST);
-   glDepthMask(GL_FALSE);
-
-   glViewport(0,0,screen_x,screen_y);
-   glClearColor(0,0,0,0);
-   glClear(GL_COLOR_BUFFER_BIT);
-
-   // translate so we draw centered
-   if (screen_x*SCREEN_Y > screen_y*SCREEN_X) {
-      int w;
-      // pixel size is sy/SCREEN_Y, so extent of x is SCREEN_X * sy / SCREEN_y
-      w = SCREEN_X * screen_y / SCREEN_Y;
-      glViewport((screen_x - w)/2.0, 0, w, screen_y);
-      // transform function is:
-      // window_x = (sx-w)/2.0 + SCREEN_X * logical_x / w;
-      // window_y = SCREEN_Y * logical_y / sy;
-
-      //xs_p2v = (float) SCREEN_X/w;
-      //ys_p2v = (float) SCREEN_Y/sy;
-      //xoff_p2v = (sx-w)/2.0f;
-      //yoff_p2v = 0;
-   } else {
-      int h = SCREEN_Y * screen_x / SCREEN_X;
-      glViewport(0, (screen_y - h)/2, screen_x,h);
-
-      //xs_p2v = (float) SCREEN_X / sx;
-      //ys_p2v = (float) SCREEN_Y / h;
-      //xoff_p2v = 0;
-      //yoff_p2v = (sy-h)/2.0f;
-   }
-
-   // force a viewport that matches our size
-
+   SDL_FillRect(screen, NULL, 0);
 }
 
 static int blinn_8x8(int p1, int p2)
@@ -1384,7 +1358,7 @@ static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c,
 }
 
 static char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789>^<v/ ";
-static int draw_text(int x, int y, int size, char *text)
+static int draw_text(int x, int y, int size, char *text, int r, int g, int b)
 {
    while (*text) {
       char *p = strchr(font, *text);
@@ -1392,7 +1366,32 @@ static int draw_text(int x, int y, int size, char *text)
          int ch = p - font;
          int s = 1 + (ch % 21)*6;
          int t = 113 + (ch/21)*8;
-         draw_rect(x, y, size*5, size*7, s, t, s+5,t+7);
+         //draw_rect(x, y, size*5, size*7, s, t, s+5,t+7);
+         SDL_LockSurface(screen);
+         color *tpx = (color *)tex->pixels;
+         color *spx = (color *)screen->pixels;
+         for (int j = 0; j < size * 7; ++j)
+			for (int i = 0; i < size * 5; ++i)
+			{
+				color px = tpx[(t + j / size) * tex->pitch / 4 + s + i / size];
+				if (px.a)
+				{
+					// BGRA pixel format
+					px.r = b;
+					px.g = g;
+					px.b = r;
+					spx[(y + j) * screen->pitch / 4 + x + i] = px;
+				}
+			}
+		 SDL_UnlockSurface(screen);
+         //SDL_Rect srcrect, dstrect;
+		 //srcrect.x = s;
+		 //srcrect.y = t;
+		 //srcrect.w = 5;
+		 //srcrect.h = 7;
+		 //dstrect.x = x;
+		 //dstrect.y = y;
+		 //SDL_BlitSurface(tex, &srcrect, screen, &dstrect);
          x += size*6;
       }
       ++text;
@@ -1406,63 +1405,54 @@ unsigned int animcycle;
 void draw_metagame(float flicker)
 {
    int i;
-   glMatrixMode(GL_PROJECTION);
-   glLoadIdentity();
-   glOrtho(0,800,600,0,-1,1);
-
+   SDL_Rect dstrect;
 
 // draw background
 
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-   glEnable(GL_BLEND);
-
-   if (main_mode == M_logo)
-      glBindTexture(GL_TEXTURE_2D, sss_tex);
-   else
-      glBindTexture(GL_TEXTURE_2D, tex);  // sprite sheet
-
-   glEnable(GL_TEXTURE_2D);
-   glBegin(GL_QUADS);
-
-   for (i=0; i < 24; ++i) {
-      int s,t;
-      int x = (rand() % 32)-32;
-      int y = (rand() % 32)-32;
-      int r = (rand() % 32)+32;
-      int g = (rand() % 32)+32;
-      int b = (rand() % 32)+32;
-      int z = 6;//(rand() % 3) + 3;
-      glColor4ub(r,g,b, 32);
-      s = rand() % 128;
-      t = rand() % 128;
-      if (main_mode == M_logo) {
-         float t = (logo_time-100) / (float) MAX_LOGO;
-         if (t < 0) t = 0;
-         t = 1-sqrt(t);
-         x += 16;
-         y += 16;
-         x = x * (t+1)*1;
-         y = y * (t+1)*1;
-         glColor4ub(r,g,b, 48 * (1-t));
-         draw_rect(x,y+100,832,432, 0,0,128,128);
-      } else
-         draw_rect(x,y,832,632, s+8*z,t+6*z,s,t); // random fragments of sprite sheet
-
+	if (main_mode == M_logo)
+	{
+	   for (i=0; i < 24; ++i) {
+		 int x = (rand() % 32)-32;
+		 int y = (rand() % 32)-32;
+		 int z = 6;//(rand() % 3) + 3;
+		 float t = (logo_time-100) / (float) MAX_LOGO;
+		 if (t < 0) t = 0;
+		 t = 1-sqrt(t);
+		 x += 16;
+		 y += 16;
+		 x = x * (t+1)*1;
+		 y = y * (t+1)*1;
+		 SDL_SetAlpha(sss_tex, SDL_SRCALPHA, 12 * (1-t));
+		 dstrect.x = x + (320 - 256) / 2;
+		 dstrect.y = y + (240 - 128) / 2;
+		 SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
+	   }
    }
-   rand(); // above computes 7*24 = 168, we go to 169 here to go more out of phase with 2^15
-   glEnd();
-
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+   else
+   {
+	   for (int i = 0; i < SCREEN_X; i += 16)
+		for (int j = 0; j < SCREEN_Y; j += 16)
+		{
+			int c = rand() % 64 + 32;
+			int r = rand() % 32;
+			int g = rand() % 32;
+			int b = rand() % 32;
+			dstrect.x = i;
+			dstrect.y = j;
+			dstrect.w = 16;
+			dstrect.h = 16;
+			SDL_FillRect(screen, &dstrect, SDL_MapRGB(screen->format, c + r, c + g, c + b));
+		}
+   }
 
    if (main_mode == M_logo) {
       float t = (logo_time-250) / (float) MAX_LOGO;
       if (t < 0) t = 0;
-      //t = sqrt(t);
-      glColor4f(1,1,1,1-t);
-      glBegin(GL_QUADS);
-      draw_rect(0,0+100,832,432, 0,0,128,128);
-      glEnd();
-
+      t = sqrt(t);
+      SDL_SetAlpha(sss_tex, SDL_SRCALPHA, (1-t) * 255);
+	  dstrect.x = (320 - 256) / 2;
+	  dstrect.y = (240 - 128) / 2;
+	  SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
       return;
    }
 
@@ -1471,17 +1461,15 @@ void draw_metagame(float flicker)
 
 // draw menu or credits
 
-   glBindTexture(GL_TEXTURE_2D, title_tex);
-   glColor3f(1,1,1);
-   glBegin(GL_QUADS);
-   draw_rect(100, main_mode == M_menu ? 0 : -85, 600,300, 0,0,128,128);
-   glEnd();
+   dstrect.x = (320 - 256) / 2;
+   dstrect.y = main_mode == M_menu ? 0 : -42;
+   SDL_BlitSurface(title_tex, NULL, screen, &dstrect);
 
-   glBindTexture(GL_TEXTURE_2D, tex);
+   //glBindTexture(GL_TEXTURE_2D, tex);
    glBegin(GL_QUADS);
 
    if (main_mode == M_menu) {
-      int sx = 400, sy = 320;
+      int sx = 160, sy = 128;
       int i;
       int enabled[8];
       get_choices(enabled);
@@ -1490,34 +1478,38 @@ void draw_metagame(float flicker)
          if (enabled[i]) {
             int len = strlen(choices[i]);
             int selected = (menu_selection == i);
-            int scale = selected ? 5 : 4;
+            int scale = selected ? 2 : 1;
             int width = len * 6 * scale;
+            int r, g, b;
 
             if (!selected) {
-               glColor4f(0.55,0.35,0.55,1.0);
+				r = 140;
+				g = 90;
+				b = 140;
             } else {
-               glColor4f(1,0.5,1,0.5+0.5*flicker);
+				r = 127 + 128 * flicker;
+				g = 64 + 64 * flicker;
+				b = 127 + 128 * flicker;
             }
-            draw_text(sx - width/2, sy, scale, choices[i]);
-            sy += 50;
+            draw_text(sx - width/2, sy, scale, choices[i], r, g, b);
+            sy += 20;
          }
       }
    } else {
-      int sx = 400, sy = 200;
+      int sx = 160, sy = 80;
       int i;
       for (i=0; i < NUM_CREDITS; ++i) {
          if (credits[i].text) {
             int len = strlen(credits[i].text);
-            int selected = (menu_selection == i);
             int scale = credits[i].scale;
             int width = len * 6 * scale;
             color c = powers[credits[i].color];
-            if ((animcycle/500) % NUM_CREDITS == (i*7)%NUM_CREDITS) { //(NUM_CREDITS*7) == (i*71) % (NUM_CREDITS*7)) {
-               glColor4ub(c.r,c.g,c.b, (int) (255*flicker));
-            } else {
-               glColor4ubv(&c.r);
+            if ((animcycle/500) % NUM_CREDITS == (i*7)%NUM_CREDITS) {
+               c.r *= flicker;
+               c.g *= flicker;
+               c.b *= flicker;
             }
-            draw_text(sx - width/2, sy, scale, credits[i].text);
+            draw_text(sx - width/2, sy, scale, credits[i].text, c.r, c.g, c.b);
          }
          sy += 8 * credits[i].scale;
       }
@@ -1554,7 +1546,7 @@ void draw_world(void)
 
    propagate_light();
 
-   glBindTexture(GL_TEXTURE_2D, tex);
+   //glBindTexture(GL_TEXTURE_2D, tex);
    glEnable(GL_TEXTURE_2D);
 
    get_map_color(&c, room_x, room_y, room_z);
@@ -1777,32 +1769,32 @@ void draw_world(void)
 
       y = 15;
       glColor3f(0.5,0.5,0.5);
-      draw_text(sx+30, y, 3, "PROMESST");
+      draw_text(sx+30, y, 3, "PROMESST", 0,0,0);
 
       y += 35;
 
       glColor3f(0.75,0.5,0.75);
 
-      draw_text(sx+20, y, 2, "<>^v TO MOVE");
+      draw_text(sx+20, y, 2, "<>^v TO MOVE", 0,0,0);
       y += 20;
-      draw_text(sx+20, y, 2, "ESC FOR MENU");
+      draw_text(sx+20, y, 2, "ESC FOR MENU", 0,0,0);
       y += 20;
-      draw_text(sx+20, y, 2, "BACKSPACE TO");
+      draw_text(sx+20, y, 2, "BACKSPACE TO", 0,0,0);
       y += 15;
-      draw_text(sx+50, y, 2, "UNDO 1 ROOM");
+      draw_text(sx+50, y, 2, "UNDO 1 ROOM", 0,0,0);
       y += 20;
       if (state.has_wand) {
          float n = fabs((animcycle % 4000)/2000.0 - 1);
          glColor3f(0.75,n,0.75);
       } else
          glColor3f(0.25,0.25,0.25);
-      draw_text(sx+20, y, 2, "Z TO FIRE");
+      draw_text(sx+20, y, 2, "Z TO FIRE", 0,0,0);
       y += 20;
       if ((state.num_gems && tilemap[pz][py][px] == TILE_receptacle) || objmap[pz][py][px].type == T_gem)
          glColor3f(0.75,0.5,0.75);
       else
          glColor3f(0.25,0.25,0.25);
-      x = draw_text(sx+20, y, 2, "X TO GET/PUT");
+      x = draw_text(sx+20, y, 2, "X TO GET/PUT", 0,0,0);
       glColor3f(1,1,1);
       draw_rect(x+2,y-3,16,16, 0,64,0+16,64+16);
       y += 35;
@@ -1810,7 +1802,7 @@ void draw_world(void)
       if (state.num_gems) {
          sprintf(buffer, "%d X ", state.num_gems);
          glColor3f(0.75,0.5,0.75);
-         x = draw_text(sx + 46, y, 3, buffer);
+         x = draw_text(sx + 46, y, 3, buffer, 0,0,0);
          glColor3f(1,1,1);
          draw_rect(x,y-7,28,28, 0,64,0+16,64+16);
       }
@@ -1832,7 +1824,7 @@ void draw_world(void)
          };
          get_abilities(abilities);
          glColor3f(0.5,0.5,0.5);
-         draw_text(sx+8,y, 3, "/ABILITIES/");
+         draw_text(sx+8,y, 3, "/ABILITIES/", 0,0,0);
          y += 10;
 
          for (i=0; i < 5; ++i) {
@@ -1842,7 +1834,7 @@ void draw_world(void)
                char *s;
                glColor4f(ccol[i][0], ccol[i][1], ccol[i][2], abilities[a] ? 1 : 0.35);
                s = (state.ability_flag & (1 << a)) ? aname[i] : cname[i];
-               draw_text(sx+100 - 3*strlen(s)*6/2, y, 3, s);
+               draw_text(sx+100 - 3*strlen(s)*6/2, y, 3, s, 0,0,0);
             }
          }
 
@@ -1850,17 +1842,17 @@ void draw_world(void)
          #define SHOW_ABILITY(x)  (abilities[x] || (state.ability_flag & (1 << (x))))
          #define FLAG(x) (state.ability_flag & (1 << (x)))
 
-         y += 25; if (SHOW_ABILITY(COLOR_red   )) {  a = abilities[COLOR_red   ] ? 1 : 0.25; glColor4f(1.0,0.25,0.25,a); draw_text(sx+80,y,3, !FLAG(COLOR_red   ) ? "RED"    : "DOOR" ); }
-         y += 25; if (SHOW_ABILITY(COLOR_green )) {  a = abilities[COLOR_green ] ? 1 : 0.25; glColor4f(0.25,1.0,0.25,a); draw_text(sx+62,y,3, !FLAG(COLOR_green ) ? "GREEN"  : "THROUGH" ); }
-         y += 25; if (SHOW_ABILITY(COLOR_teal  )) {  a = abilities[COLOR_teal  ] ? 1 : 0.25; glColor4f(0.25,1.0,1.0 ,a); draw_text(sx+71,y,3, !FLAG(COLOR_teal  ) ? "TEAL"   : "STRONG" ); }
-         y += 25; if (SHOW_ABILITY(COLOR_yellow)) {  a = abilities[COLOR_yellow] ? 1 : 0.25; glColor4f(1.0,1.0,0.25 ,a); draw_text(sx+53,y,3, !FLAG(COLOR_yellow) ? "YELLOW" : "DESTROY" ); }
-         y += 25; if (SHOW_ABILITY(COLOR_orange)) {  a = abilities[COLOR_orange] ? 1 : 0.25; glColor4f(1.0,0.5,0.15 ,a); draw_text(sx+53,y,3, !FLAG(COLOR_orange) ? "ORANGE" : "DOUBLE" ); }
+         y += 25; if (SHOW_ABILITY(COLOR_red   )) {  a = abilities[COLOR_red   ] ? 1 : 0.25; glColor4f(1.0,0.25,0.25,a); draw_text(sx+80,y,3, !FLAG(COLOR_red   ) ? "RED"    : "DOOR" , 0,0,0); }
+         y += 25; if (SHOW_ABILITY(COLOR_green )) {  a = abilities[COLOR_green ] ? 1 : 0.25; glColor4f(0.25,1.0,0.25,a); draw_text(sx+62,y,3, !FLAG(COLOR_green ) ? "GREEN"  : "THROUGH" , 0,0,0); }
+         y += 25; if (SHOW_ABILITY(COLOR_teal  )) {  a = abilities[COLOR_teal  ] ? 1 : 0.25; glColor4f(0.25,1.0,1.0 ,a); draw_text(sx+71,y,3, !FLAG(COLOR_teal  ) ? "TEAL"   : "STRONG" , 0,0,0); }
+         y += 25; if (SHOW_ABILITY(COLOR_yellow)) {  a = abilities[COLOR_yellow] ? 1 : 0.25; glColor4f(1.0,1.0,0.25 ,a); draw_text(sx+53,y,3, !FLAG(COLOR_yellow) ? "YELLOW" : "DESTROY" , 0,0,0); }
+         y += 25; if (SHOW_ABILITY(COLOR_orange)) {  a = abilities[COLOR_orange] ? 1 : 0.25; glColor4f(1.0,0.5,0.15 ,a); draw_text(sx+53,y,3, !FLAG(COLOR_orange) ? "ORANGE" : "DOUBLE" , 0,0,0); }
          #endif
       }
 
       y += 33;
       glColor3f(0.5,0.5,0.5);
-      draw_text(sx + 62, y, 3, "/MAP/");
+      draw_text(sx + 62, y, 3, "/MAP/", 0,0,0);
 
       sy = y+25;
       for (y=0; y < NUM_Y*SIZE_Y; ++y) {
@@ -1906,8 +1898,8 @@ void draw_world(void)
 
    if (checkpoint_timer > 0) {
       glColor4f(0.5,1.0,0.5,flicker);
-      draw_text(60, checkpoint_timer/2 - 120, 8, "CHECKPOINT");
-      draw_text(160, checkpoint_timer/2 - 40, 8, "SAVED");
+      draw_text(60, checkpoint_timer/2 - 120, 8, "CHECKPOINT", 0,0,0);
+      draw_text(160, checkpoint_timer/2 - 40, 8, "SAVED", 0,0,0);
    }
    glEnd();
 
@@ -1934,14 +1926,14 @@ void draw_world(void)
          glEnable(GL_BLEND);
          glBegin(GL_QUADS);
          glColor3f(0,0,0);
-         draw_text(150,250, 12, "YOU WIN");
+         draw_text(150,250, 12, "YOU WIN", 0,0,0);
          if (state.egg_timer > 17000) {
             float a = (state.egg_timer - 17000)/2000.0;
             char buffer[64];
             sprintf(buffer, "USED %d ZAPS", state.num_zaps);
             if (a > 1) a = 1;
             glColor4f(0.5,0,0.5, a);
-            draw_text(250,400,4, buffer);
+            draw_text(250,400,4, buffer, 0,0,0);
          }
          glEnd();
       }
@@ -1954,7 +1946,7 @@ void draw()
 {
    draw_init();
    draw_world();
-   SDL_GL_SwapBuffers();
+   SDL_Flip(screen);
 }
 
 static float last_dt;
@@ -1998,10 +1990,12 @@ int main(int argc, char **argv)
 		}
 	}
 
+	SDL_Init(SDL_INIT_VIDEO);
+	IMG_Init(IMG_INIT_PNG);
+
 	// create window
-	SDL_SetVideoMode(SCREEN_X, SCREEN_Y, 32,
-		(fullscreen ? SDL_FULLSCREEN : 0) |
-		SDL_RESIZABLE | SDL_OPENGL);
+	screen = SDL_SetVideoMode(SCREEN_X, SCREEN_Y, 32,
+		fullscreen ? SDL_FULLSCREEN : 0);
 	SDL_WM_SetCaption(APPNAME, NULL);
 	SDL_EnableKeyRepeat(1, 200);
 

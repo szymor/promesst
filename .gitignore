@@ -1,4 +1,5 @@
 promesst
 promesst.exe
 *.o
-
+stdout.txt
+stderr.txt

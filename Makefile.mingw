@@ -1,3 +1,3 @@
-LFLAGS = -lopengl32 -lglu32 -lmingw32 -lSDLmain -lSDL
+LFLAGS = -lopengl32 -lglu32 -lmingw32 -lSDLmain -lSDL -lSDL_image
 
 include common.mk
