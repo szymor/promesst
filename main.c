@@ -21,6 +21,7 @@
 #include "stb_gl.h"
 #undef STB_DEFINE
 #include <SDL/SDL_image.h>
+#include <SDL/SDL_gfxPrimitives.h>
 
 #define TIME_SCALE 1
 
@@ -1316,19 +1317,25 @@ static int blinn_8x8(int p1, int p2)
    return (m + (m>>8)) >> 8;
 }
 
-static void draw_rect(int x, int y, int w, int h, int is0, int it0, int is1, int it1)
+static void draw_rect(int x, int y, int w, int h, int s, int t, int scale)
 {
-   float s0,s1,t0,t1;
-
-   s0 = (is0+0.05) / 128.0;
-   t0 = (it0+0.05) / 128.0;
-   s1 = (is1-0.05) / 128.0;
-   t1 = (it1-0.05) / 128.0;
-
-   glTexCoord2f(s0,t0); glVertex2i(x   ,y   );
-   glTexCoord2f(s1,t0); glVertex2i(x+w ,y   );
-   glTexCoord2f(s1,t1); glVertex2i(x+w ,y+h );
-   glTexCoord2f(s0,t1); glVertex2i(x   ,y+h );
+     SDL_LockSurface(screen);
+     color *tpx = (color *)tex->pixels;
+     color *spx = (color *)screen->pixels;
+     for (int j = 0; j < scale * h; ++j)
+        for (int i = 0; i < scale * w; ++i)
+        {
+            color px = tpx[(t + j / scale) * tex->pitch / 4 + s + i / scale];
+            if (px.a)
+            {
+                // BGRA pixel format
+                uint8 temp = px.r;
+                px.r = px.b;
+                px.b = temp;
+                spx[(y + j) * screen->pitch / 4 + x + i] = px;
+            }
+        }
+     SDL_UnlockSurface(screen);
 }
 
 static void draw_sprite(int x, int y, int s, int t, color *c, float a)
@@ -1341,7 +1348,7 @@ static void draw_sprite(int x, int y, int s, int t, color *c, float a)
    x = x*16 - 12;
    y = y*16 - 12;
 
-   draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
+   //draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
 }
 
 static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c, float a)
@@ -1354,7 +1361,7 @@ static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c,
    x = x*16 - 12 + dx;
    y = y*16 - 12 + dy;
 
-   draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
+   //draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
 }
 
 static char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789>^<v/ ";
@@ -1366,13 +1373,15 @@ static int draw_text(int x, int y, int size, char *text, int r, int g, int b)
          int ch = p - font;
          int s = 1 + (ch % 21)*6;
          int t = 113 + (ch/21)*8;
-         //draw_rect(x, y, size*5, size*7, s, t, s+5,t+7);
          SDL_LockSurface(screen);
          color *tpx = (color *)tex->pixels;
          color *spx = (color *)screen->pixels;
          for (int j = 0; j < size * 7; ++j)
 			for (int i = 0; i < size * 5; ++i)
 			{
+                int offset = (y + j) * screen->pitch / 4 + x + i;
+                if (offset >= (SCREEN_X * SCREEN_Y))
+                    continue;
 				color px = tpx[(t + j / size) * tex->pitch / 4 + s + i / size];
 				if (px.a)
 				{
@@ -1380,18 +1389,10 @@ static int draw_text(int x, int y, int size, char *text, int r, int g, int b)
 					px.r = b;
 					px.g = g;
 					px.b = r;
-					spx[(y + j) * screen->pitch / 4 + x + i] = px;
+					spx[offset] = px;
 				}
 			}
 		 SDL_UnlockSurface(screen);
-         //SDL_Rect srcrect, dstrect;
-		 //srcrect.x = s;
-		 //srcrect.y = t;
-		 //srcrect.w = 5;
-		 //srcrect.h = 7;
-		 //dstrect.x = x;
-		 //dstrect.y = y;
-		 //SDL_BlitSurface(tex, &srcrect, screen, &dstrect);
          x += size*6;
       }
       ++text;
@@ -1465,9 +1466,6 @@ void draw_metagame(float flicker)
    dstrect.y = main_mode == M_menu ? 0 : -42;
    SDL_BlitSurface(title_tex, NULL, screen, &dstrect);
 
-   //glBindTexture(GL_TEXTURE_2D, tex);
-   glBegin(GL_QUADS);
-
    if (main_mode == M_menu) {
       int sx = 160, sy = 128;
       int i;
@@ -1514,7 +1512,6 @@ void draw_metagame(float flicker)
          sy += 8 * credits[i].scale;
       }
    }
-   glEnd();
 }
 
 
@@ -1545,7 +1542,7 @@ void draw_world(void)
    tile_sprite[0].s = (room_x ^ room_y) & 1 ? 7 : 0;
 
    propagate_light();
-
+/*
    //glBindTexture(GL_TEXTURE_2D, tex);
    glEnable(GL_TEXTURE_2D);
 
@@ -1752,63 +1749,50 @@ void draw_world(void)
    glMatrixMode(GL_PROJECTION);
    glLoadIdentity();
    glOrtho(0,800,600,0,-1,1);
-
-   glBegin(GL_QUADS);
+*/
    {
       char buffer[64];
-      int x, y, sy;
-      glColor3f(1,1,1);
-      //draw_rect(0,0, sx,1, 127,31,127,31);
-      //draw_rect(0,415, sx,1, 127,31,127,31);
-      //draw_rect(0,0, 1,415, 127,31,127,31);
-      //draw_rect(sx,0, 1,415, 127,31,127,31);
-      draw_rect(sx,0,   210,2, 127,31,127,31);
-      draw_rect(sx,598, 210,2, 127,31,127,31);
-      draw_rect(sx,0,   2,600, 127,31,127,31);
-      draw_rect(798,0,  2,600, 127,31,127,31);
+      int x, y, sx, sy;
+      // side menu border
+      sx = SCREEN_Y;
+      rectangleRGBA (screen, sx, 0, SCREEN_X - 1, SCREEN_Y - 1, 255, 255, 255, 255);
 
-      y = 15;
-      glColor3f(0.5,0.5,0.5);
-      draw_text(sx+30, y, 3, "PROMESST", 0,0,0);
+      y = 7;
+      draw_text(sx + 15, y, 1, "PROMESST", 128, 128, 128);
 
-      y += 35;
+      y += 10;
 
-      glColor3f(0.75,0.5,0.75);
+      draw_text(sx + 5, y, 1, "<>^v TO MOVE", 192, 128, 192);
+      y += 10;
+      draw_text(sx + 5, y, 1, "RST FOR MENU", 192, 128, 192);
+      y += 10;
+      draw_text(sx + 5, y, 1, "R BUTTON TO", 192, 128, 192);
+      y += 7;
+      draw_text(sx + 12, y, 1, "UNDO 1 ROOM", 192, 128, 192);
 
-      draw_text(sx+20, y, 2, "<>^v TO MOVE", 0,0,0);
-      y += 20;
-      draw_text(sx+20, y, 2, "ESC FOR MENU", 0,0,0);
-      y += 20;
-      draw_text(sx+20, y, 2, "BACKSPACE TO", 0,0,0);
-      y += 15;
-      draw_text(sx+50, y, 2, "UNDO 1 ROOM", 0,0,0);
-      y += 20;
+      y += 10;
       if (state.has_wand) {
          float n = fabs((animcycle % 4000)/2000.0 - 1);
-         glColor3f(0.75,n,0.75);
+         draw_text(sx + 5, y, 1, "A TO FIRE", 192, n * 255, 192);
       } else
-         glColor3f(0.25,0.25,0.25);
-      draw_text(sx+20, y, 2, "Z TO FIRE", 0,0,0);
-      y += 20;
+         draw_text(sx + 5, y, 1, "A TO FIRE", 64, 64, 64);
+      y += 10;
       if ((state.num_gems && tilemap[pz][py][px] == TILE_receptacle) || objmap[pz][py][px].type == T_gem)
-         glColor3f(0.75,0.5,0.75);
+         x = draw_text(sx + 5, y, 1, "B GET/PUT", 192, 128, 192);
       else
-         glColor3f(0.25,0.25,0.25);
-      x = draw_text(sx+20, y, 2, "X TO GET/PUT", 0,0,0);
-      glColor3f(1,1,1);
-      draw_rect(x+2,y-3,16,16, 0,64,0+16,64+16);
-      y += 35;
+         x = draw_text(sx + 5, y, 1, "B GET/PUT", 64, 64, 64);
+      // draw gem
+      draw_rect(x + 2, y - 3, 16, 16, 0, 64, 1);
+      y += 17;
 
       if (state.num_gems) {
          sprintf(buffer, "%d X ", state.num_gems);
-         glColor3f(0.75,0.5,0.75);
-         x = draw_text(sx + 46, y, 3, buffer, 0,0,0);
-         glColor3f(1,1,1);
-         draw_rect(x,y-7,28,28, 0,64,0+16,64+16);
+         x = draw_text(sx + 16, y, 1, buffer, 192, 128, 192);
+         // draw gem
+         draw_rect(x, y - 7, 16, 16, 0, 64, 1);
       }
 
-      y += 50;
-
+      y += 15;
       {
          uint8 abilities[8] = { 1,1,1,1, 1,1,1,1 };
          int i;
@@ -1823,18 +1807,20 @@ void draw_world(void)
             1.0,0.5,0.15 ,
          };
          get_abilities(abilities);
-         glColor3f(0.5,0.5,0.5);
-         draw_text(sx+8,y, 3, "/ABILITIES/", 0,0,0);
-         y += 10;
+         draw_text(sx + 8, y, 1, "/ABILITIES/", 128, 128, 128);
 
          for (i=0; i < 5; ++i) {
             int a = which[i];
-            y += 25;
+            y += 10;
             if (abilities[a] || (state.ability_flag & (1 << a))) {
                char *s;
-               glColor4f(ccol[i][0], ccol[i][1], ccol[i][2], abilities[a] ? 1 : 0.35);
+               color c;
+               c.a = abilities[a] ? 1 : 3;
+               c.r = ccol[i][0] * 255 / c.a;
+               c.g = ccol[i][1] * 255 / c.a;
+               c.b = ccol[i][2] * 255 / c.a;
                s = (state.ability_flag & (1 << a)) ? aname[i] : cname[i];
-               draw_text(sx+100 - 3*strlen(s)*6/2, y, 3, s, 0,0,0);
+               draw_text(sx + 40 - strlen(s) * 6 / 2, y, 1, s, c.r, c.g, c.b);
             }
          }
 
@@ -1850,21 +1836,27 @@ void draw_world(void)
          #endif
       }
 
-      y += 33;
-      glColor3f(0.5,0.5,0.5);
-      draw_text(sx + 62, y, 3, "/MAP/", 0,0,0);
+      y += 12;
+      draw_text(sx + 25, y, 1, "/MAP/", 128, 128, 128);
 
-      sy = y+25;
+      // minimap drawing
+      sy = y + 8;
       for (y=0; y < NUM_Y*SIZE_Y; ++y) {
          int ry = y / SIZE_Y;
          for (x=0; x < NUM_X*SIZE_X; ++x) {
             int rx = x / SIZE_X;
             if (state.seen[room_z] & (1 << (ry*NUM_X+rx))) {
+               color clr;
                float a = 0.5;
                if (rx == room_x && ry == room_y)
                   a = 1.0;
                if (room_z == pz && x == px && y == py)
-                  glColor4f(0.7,0.5,0.7,a);
+               {
+                   clr.r = 255 * 0.7;
+                   clr.g = 255 * 0.5;
+                   clr.b = 255 * 0.7;
+                   clr.a = 255 * a;
+               }
                else if (objmap[room_z][y][x].type == T_projector) {
                   color *c = &powers[objmap[room_z][y][x].color];
                   uint8 ia;
@@ -1873,36 +1865,80 @@ void draw_world(void)
                   else
                      ia = (a < 1) ?  64 : 192;
 
-                  glColor4ub(c->r, c->g, c->b, ia);
+                  clr.r = c->r;
+                  clr.g = c->g;
+                  clr.b = c->b;
+                  clr.a = ia;
                } else if (tilemap[room_z][y][x] == TILE_wall || tilemap[room_z][y][x] == TILE_door) {
                   if (room_z)
-                     glColor4f(0.4,0.5,0.6,a);
+                  {
+                   clr.r = 255 * 0.4;
+                   clr.g = 255 * 0.5;
+                   clr.b = 255 * 0.6;
+                   clr.a = 255 * a;
+                  }
                   else
-                     glColor4f(0.6,0.5,0.4,a);
+                  {
+                   clr.r = 255 * 0.6;
+                   clr.g = 255 * 0.5;
+                   clr.b = 255 * 0.4;
+                   clr.a = 255 * a;
+                  }
                } else if (tilemap[room_z][y][x] == TILE_stairs) {
-                  glColor4f(0.65,0.7,0.95,a);
+                  clr.r = 255 * 0.65;
+                  clr.g = 255 * 0.7;
+                  clr.b = 255 * 0.95;
+                  clr.a = 255 * a;
                } else if (room_z == 1 && x == egg_x && y == egg_y) {
-                  glColor4f(1,1,1,a);
+                  clr.r = 255;
+                  clr.g = 255;
+                  clr.b = 255;
+                  clr.a = 255 * a;
                } else if (objmap[room_z][y][x].type == T_gem) {
-                  if (objmap[room_z][y][x].dir)
-                     glColor4f(0.8,0.7,0.8,a*(3+flicker)/4);
-                  else
-                     glColor4f(0.8,0.7,0.8,a);
-               } else
-                  glColor4f(0.25,0.25,0.25,a);
-               draw_rect(sx+20+x*7,sy+y*7,7,7, 127,31,127,31);
+                  if (objmap[room_z][y][x].dir) {
+                     clr.r = 255 * 0.8;
+                     clr.g = 255 * 0.7;
+                     clr.b = 255 * 0.8;
+                     clr.a = 255 * a*(3+flicker)/4;
+                  }
+                  else {
+                     clr.r = 255 * 0.8;
+                     clr.g = 255 * 0.7;
+                     clr.b = 255 * 0.8;
+                     clr.a = 255 * a;
+                  }
+               } else {
+                  clr.r = 255 * 0.25;
+                  clr.g = 255 * 0.25;
+                  clr.b = 255 * 0.25;
+                  clr.a = 255 * a;
+                 }
+
+               // apply alpha
+               clr.r = clr.r * clr.a / 255;
+               clr.g = clr.g * clr.a / 255;
+               clr.b = clr.b * clr.a / 255;
+               SDL_Rect rect = {
+                   .x = x*3 + SCREEN_Y + 4,//sx+20+x*7,
+                   .y = y*3 + sy,//sy+y*7,
+                   .w = 3,
+                   .h = 3
+               };
+               SDL_FillRect(screen, &rect, SDL_MapRGB(screen->format, clr.r, clr.g, clr.b));
             }
          }
       }
-   }
+   // end of side menu
 
+   // 'checkpoint saved' popup
    if (checkpoint_timer > 0) {
-      glColor4f(0.5,1.0,0.5,flicker);
-      draw_text(60, checkpoint_timer/2 - 120, 8, "CHECKPOINT", 0,0,0);
-      draw_text(160, checkpoint_timer/2 - 40, 8, "SAVED", 0,0,0);
+      color c;
+      c.r = 128 * flicker;
+      c.g = 255 * flicker;
+      c.b = 128 * flicker;
+      draw_text(SCREEN_Y / 2 - 6 * 10, checkpoint_timer / 6 - 32, 2, "CHECKPOINT", c.r, c.g, c.b);
+      draw_text(SCREEN_Y / 2 - 6 * 5, checkpoint_timer / 6 - 16, 2, "SAVED", c.r, c.g, c.b);
    }
-   glEnd();
-
 
    if (state.egg_timer > 8000) {
       int a = (state.egg_timer - 8000) >> 4;
@@ -1915,30 +1951,22 @@ void draw_world(void)
          b += a-128; if (b >= 255) b = 255;
          if (a >= 255) a = 255;
       }
-      glBlendFunc(GL_SRC_ALPHA, GL_ADD);
-      glEnable(GL_BLEND);
-      glColor4ub(r,g,b,a);
-      glBegin(GL_QUADS);
-      draw_rect(0,0, 800,600, 112,16,127,31);
-      glEnd();
+      // I was too lazy to implement proper alpha blending, sorry
+      SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, r, g, b));
+
       if (state.egg_timer > 14000) {
-         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-         glEnable(GL_BLEND);
-         glBegin(GL_QUADS);
-         glColor3f(0,0,0);
-         draw_text(150,250, 12, "YOU WIN", 0,0,0);
+         draw_text(SCREEN_X / 2 - 7 * 12, SCREEN_Y / 2 - 14, 4, "YOU WIN", 0, 0, 0);
          if (state.egg_timer > 17000) {
             float a = (state.egg_timer - 17000)/2000.0;
             char buffer[64];
             sprintf(buffer, "USED %d ZAPS", state.num_zaps);
             if (a > 1) a = 1;
-            glColor4f(0.5,0,0.5, a);
-            draw_text(250,400,4, buffer, 0,0,0);
+            draw_text(SCREEN_X / 2 - 11 * 6, SCREEN_Y / 2 + 16, 2, buffer, 128, 0, 128);
          }
-         glEnd();
       }
       if (state.egg_timer > 22000)
          exit(0);  // shouldn't call save!
+     }
    }
 }
 
