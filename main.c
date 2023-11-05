@@ -1868,8 +1868,27 @@ void draw_world(void)
          b += a-128; if (b >= 255) b = 255;
          if (a >= 255) a = 255;
       }
-      // I was too lazy to implement proper alpha blending, sorry
-      SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, r, g, b));
+
+      // alpha blend the whole screen with a single color
+     float alpha = a / 255.0f;
+     SDL_LockSurface(screen);
+     color *spx = (color *)screen->pixels;
+     for (int y = 0; y < SCREEN_Y; ++y)
+        for (int x = 0; x < SCREEN_X; ++x)
+        {
+            int offset = y * screen->pitch / 4 + x;
+            int c;
+            c = spx[offset].r * (1.0f - alpha) + r * alpha;
+            if (c > 255) c = 255;
+            spx[offset].r = c;
+            c = spx[offset].g * (1.0f - alpha) + g * alpha;
+            if (c > 255) c = 255;
+            spx[offset].g = c;
+            c = spx[offset].b * (1.0f - alpha) + b * alpha;
+            if (c > 255) c = 255;
+            spx[offset].b = c;
+        }
+     SDL_UnlockSurface(screen);
 
       if (state.egg_timer > 14000) {
          draw_text(SCREEN_X / 2 - 7 * 12, SCREEN_Y / 2 - 14, 4, "YOU WIN", 0, 0, 0);
