@@ -1595,7 +1595,7 @@ void draw_world(void)
             sx = sy = 0;
          draw_subsprite(x+1,y+1, sx,sy, obj_sprite[t].s+ds, obj_sprite[t].t, z, 1);
 
-         if (x >= 0 && x < SIZE_X && y >= 0 && y < SIZE_Y) {
+         if (x >= 0 && x <= SIZE_X && y >= 0 && y <= SIZE_Y) {
             if (t == T_projector) {
                int p = has_power[my/SIZE_Y][mx/SIZE_X];
                draw_sprite(x+1,y+1, 4+p, 2, &powers[o.color], 0.5);
