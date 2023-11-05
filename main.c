@@ -17,7 +17,6 @@
 #include <sys/stat.h>
 
 #define STB_DEFINE
-#include "stb_image.c"  // before stb_gl so we get stbgl_LoadImage support
 #include "stb_gl.h"
 #undef STB_DEFINE
 #include <SDL/SDL_image.h>
@@ -421,45 +420,6 @@ typedef struct st_roomsave_big
 //
 //  undo:
 //         1. pop undo stack
-
-
-#if 0
-// we could try to use this if we know that the change doesn't
-// include any out-of-room effects, but the restore logic was
-// a lot more complicated so I punted it
-typedef struct st_roomsave
-{
-   struct st_roomsave *next;
-   uint8 big_flag;
-   player_state state;
-   uint8 room_x, room_y, room_z;
-   obj objmap[SIZE_Y][SIZE_X];
-} roomsave; // 52 bytes incl malloc overhead
-//   when you enter a room:
-//      turn previous save into an undo entry:
-//         1. if "out-of-room" effects flag set,
-//            add roomsave_big to undo chain
-//         2. otherwise, add roomsave to undo chain
-//      save current state:
-//         3. create a roomsave_big for the room
-//            being entered (and save previous player state)
-//         4. clear the "out-of-room" effects flag.
-//         5. during play, set the "out-of-room"
-//            effects flag if the player pushes
-//            anything out of room
-//
-//  on undo, say we're in world state N:
-//
-//     1. restore stored roomsave_big
-//
-//  this returns us to state N-1. but we can now make further
-//  changes, invalidating the N-2 delta IF that delta isn't big.
-//
-//     2. pop undo stack
-//        2a. if big on stack, copy into roomsave_big
-//        2b. if small on stack, combined current world with undo'd room to create roomsave_big
-#endif
-
 
 int room_x, room_y, room_z;
 
@@ -1317,7 +1277,7 @@ static int blinn_8x8(int p1, int p2)
    return (m + (m>>8)) >> 8;
 }
 
-static void draw_rect(int x, int y, int w, int h, int s, int t, int scale)
+static void draw_rect(int x, int y, int w, int h, int s, int t, int scale, color *c)
 {
      SDL_LockSurface(screen);
      color *tpx = (color *)tex->pixels;
@@ -1325,9 +1285,18 @@ static void draw_rect(int x, int y, int w, int h, int s, int t, int scale)
      for (int j = 0; j < scale * h; ++j)
         for (int i = 0; i < scale * w; ++i)
         {
+            if ((x + i) < 0 || (x + i) >= SCREEN_X ||
+                (y + j) < 0 || (y + j) >= SCREEN_Y)
+                continue;
             color px = tpx[(t + j / scale) * tex->pitch / 4 + s + i / scale];
             if (px.a)
             {
+                if (c)
+                {
+                    px.r = px.r * c->r / 255;
+                    px.g = px.g * c->g / 255;
+                    px.b = px.b * c->b / 255;
+                }
                 // BGRA pixel format
                 uint8 temp = px.r;
                 px.r = px.b;
@@ -1340,28 +1309,18 @@ static void draw_rect(int x, int y, int w, int h, int s, int t, int scale)
 
 static void draw_sprite(int x, int y, int s, int t, color *c, float a)
 {
-   if (c)
-      glColor4ub(c->r, c->g, c->b, (int) (c->a * a));
-   else
-      glColor4f(1,1,1,a);
+   x = x * 32 - 16;
+   y = y * 32 - 8;
 
-   x = x*16 - 12;
-   y = y*16 - 12;
-
-   //draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
+   draw_rect(x, y, 16, 16, s * 16, t * 16, 2, c);
 }
 
 static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c, float a)
 {
-   if (c)
-      glColor4ub(c->r, c->g, c->b, (int) (c->a * a));
-   else
-      glColor4f(1,1,1,a);
+   x = x * 32 - 16 + dx * 2;
+   y = y * 32 - 8 + dy * 2;
 
-   x = x*16 - 12 + dx;
-   y = y*16 - 12 + dy;
-
-   //draw_rect(x, y, 16, 16, s*16, t*16, (s+1)*16,(t+1)*16);
+   draw_rect(x, y, 16, 16, s * 16, t * 16, 2, c);
 }
 
 static char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789>^<v/ ";
@@ -1542,20 +1501,9 @@ void draw_world(void)
    tile_sprite[0].s = (room_x ^ room_y) & 1 ? 7 : 0;
 
    propagate_light();
-/*
-   //glBindTexture(GL_TEXTURE_2D, tex);
-   glEnable(GL_TEXTURE_2D);
 
    get_map_color(&c, room_x, room_y, room_z);
 
-   glMatrixMode(GL_PROJECTION);
-   glLoadIdentity();
-   glOrtho(0,140,104,0,-1,1);
-
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-   glEnable(GL_BLEND);
-
-   glBegin(GL_QUADS);
    for (y=-1; y <= SIZE_Y; ++y) {
       for (x=-1; x <= SIZE_X; ++x) {
          color *z, lit;
@@ -1661,42 +1609,22 @@ void draw_world(void)
       epx = - (16 * xdir[pdir] * (player_timer - (PLAYER_MOVE_TIME - PLAYER_TRAVEL_TIME)) / PLAYER_TRAVEL_TIME);
       epy = - (16 * ydir[pdir] * (player_timer - (PLAYER_MOVE_TIME - PLAYER_TRAVEL_TIME))/ PLAYER_TRAVEL_TIME);
    } else {
-      epx = epy  =0;
+      epx = epy = 0;
    }
 
    draw_subsprite(px - room_x*SIZE_X+1, py - room_y*SIZE_Y+1, epx, epy, pdir,6, 0,1);
-   if (0) {
-      int colors[4], num_colors = 0;
-      int d = 0;
-      color *c;
-      for (d=0; d < 4; ++d)
-         if (light_for_dir[py][px][d])
-            colors[num_colors++] = light_for_dir[py][px][d];
-      if (num_colors) {
-         float a = (512 - abs((animcycle&1023) - 512)) / 512.0;
-         c = &powers[colors[(animcycle >> 10) % num_colors]];
-         draw_sprite(epx - room_x*SIZE_X+1, epy - room_y*SIZE_Y+1, 1,1, c,a*0.5);
-      }
-   }
 
    if (shot_timer > 0) {
       x = shot_x - room_x*SIZE_X + 1;
       y = shot_y - room_y*SIZE_Y + 1;
-      x = x*16 - 12;
-      y = y*16 - 12;
-      glColor3f(1,1,1);
-      draw_rect(x+4,y+4,8,8, 64,64,80,80);
+      x = x * 32 - 16;
+      y = y * 32 - 8;
+      draw_rect(x + 4, y + 4, 16, 16, 64, 64, 1, NULL);
    }
 
-   glEnd();
-
-
+/*
+   // disabled for SDL 1.2 port
    // do all additive rendering
-
-   glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-   glEnable(GL_BLEND);
-
-   glBegin(GL_QUADS);
    for (y= -1; y <= SIZE_Y; ++y) {
       for (x= -1; x <= SIZE_X; ++x) {
          int mx = ((room_x+NUM_X)*SIZE_X + x) % (SIZE_X*NUM_X);
@@ -1731,7 +1659,6 @@ void draw_world(void)
          draw_subsprite(px - room_x*SIZE_X+1, py - room_y*SIZE_Y+1, epx,epy, 1,1, c,a*0.5);
       }
    }
-   glEnd();
 
    sx = (SIZE_X+1) * 16 - 12 + 4;
 
@@ -1742,13 +1669,6 @@ void draw_world(void)
       glColor3f(0,0,0);
       draw_rect(sx, 0, 120,160, 112,16,127,31);
    glEnd();
-
-
-   sx = sx*800/140;
-
-   glMatrixMode(GL_PROJECTION);
-   glLoadIdentity();
-   glOrtho(0,800,600,0,-1,1);
 */
    {
       char buffer[64];
@@ -1782,14 +1702,14 @@ void draw_world(void)
       else
          x = draw_text(sx + 5, y, 1, "B GET/PUT", 64, 64, 64);
       // draw gem
-      draw_rect(x + 2, y - 3, 16, 16, 0, 64, 1);
+      draw_rect(x + 2, y - 3, 16, 16, 0, 64, 1, NULL);
       y += 17;
 
       if (state.num_gems) {
          sprintf(buffer, "%d X ", state.num_gems);
          x = draw_text(sx + 16, y, 1, buffer, 192, 128, 192);
          // draw gem
-         draw_rect(x, y - 7, 16, 16, 0, 64, 1);
+         draw_rect(x, y - 7, 16, 16, 0, 64, 1, NULL);
       }
 
       y += 15;

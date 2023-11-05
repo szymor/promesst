@@ -19,9 +19,9 @@ https://silverspaceship.com/promesst2/
 ## how to play
 Arrow keys to move.
 
-Buttons A and B are actions that become available when you have the appropriate equipment.
+Buttons A and B (Z and X keys) are actions that become available when you have the appropriate equipment.
 
-Backspace to undo to before you entered the current room.
+Button R (Backspace key) to undo to before you entered the current room.
 
 ## changelog
 Look at the git commit history for the newest changes.

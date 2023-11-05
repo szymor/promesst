@@ -3,7 +3,7 @@ TARGET=promesst
 all: $(TARGET)
 .PHONY: all
 
-$(TARGET): main.c stb_gl.h stb_image.c
+$(TARGET): main.c stb_gl.h
 	gcc -o $(TARGET) main.c $(LFLAGS)
 
 clean:
