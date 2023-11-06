@@ -1679,7 +1679,7 @@ void draw_world(void)
 
       draw_text(sx + 5, y, 1, "<>^v TO MOVE", 192, 128, 192);
       y += 10;
-      draw_text(sx + 5, y, 1, "RST FOR MENU", 192, 128, 192);
+      draw_text(sx + 5, y, 1, "SEL FOR MENU", 192, 128, 192);
       y += 10;
       draw_text(sx + 5, y, 1, "R BUTTON TO", 192, 128, 192);
       y += 7;
@@ -1993,13 +1993,18 @@ int main(int argc, char **argv)
           loopmode(0);
           break;
         case SDL_KEYDOWN:
+          queued_key = 0;
           switch (msg.key.keysym.sym) {
             case SDLK_DOWN : queued_key = 's'; break;
             case SDLK_LEFT : queued_key = 'a'; break;
             case SDLK_RIGHT: queued_key = 'd'; break;
             case SDLK_UP   : queued_key = 'w'; break;
+#ifdef MIYOO
+            case SDLK_SPACE : queued_key = 'x'; break;
+            case SDLK_LCTRL : queued_key = 'z'; break;
+#endif
           }
-          if (msg.key.keysym.sym < 128)
+          if (!queued_key && msg.key.keysym.sym < 128)
           {
             queued_key = msg.key.keysym.sym;
           }

@@ -1,0 +1,8 @@
+CC = arm-linux-gcc
+LFLAGS = `pkg-config --cflags --libs sdl SDL_image SDL_gfx` -lpng -ljpeg -lz -DMIYOO
+
+zip: promesst
+	zip -r promesst.zip promesst data/
+.PHONY: zip
+
+include common.mk
