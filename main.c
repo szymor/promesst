@@ -70,11 +70,6 @@ static SDL_Surface *tex = NULL;
 
 void init_graphics(void)
 {
-   //int w,h,i;
-   //colordata = stbi_load("data/sprites.png", &w,&h,0,0);
-   //tex = stbgl_TexImage2D(0, w,h, colordata, "n");
-   //for (i=0; i < 8; ++i)
-      //memcpy(&powers[i].r, colordata+96*128*4 + (112+i)*4, 4);
    tex = IMG_Load("data/sprites.png");
    colordata = (uint8 *)tex->pixels;
    for (int i = 0; i < 8; ++i)
@@ -476,9 +471,7 @@ void propagate_light(void)
                      break;
                }
             }
-
 }
-
 
 typedef struct
 {
@@ -486,7 +479,6 @@ typedef struct
    obj objmap[2][NUM_Y*SIZE_Y][NUM_X*SIZE_X];
    player_state state;
 } gamestate;
-
 
 static void save_map(gamestate *g)
 {
@@ -1109,48 +1101,48 @@ gamestate loaded_game;
 
 static char *get_savegame_path(void)
 {
-	char *root_dir = getenv("XDG_DATA_HOME");
-	static bool gotpath = false;
-	static char save_dir[PATH_MAX] = {0};
-	if (gotpath) return save_dir;
-	if (!root_dir)
-	{
-		root_dir = getenv("HOME");
-		if (!root_dir)
-		{
-			strcpy(save_dir, "data/save.dat");
-			gotpath = true;
-			return save_dir;
-		}
-		else
-		{
-			strcpy(save_dir, root_dir);
-			strcat(save_dir, "/.local/share/Promesst/save.dat");
-		}
-	}
-	else
-	{
-		strcpy(save_dir, root_dir);
-		strcat(save_dir, "/Promesst/save.dat");
-	}
+  char *root_dir = getenv("XDG_DATA_HOME");
+  static bool gotpath = false;
+  static char save_dir[PATH_MAX] = {0};
+  if (gotpath) return save_dir;
+  if (!root_dir)
+  {
+    root_dir = getenv("HOME");
+    if (!root_dir)
+    {
+      strcpy(save_dir, "data/save.dat");
+      gotpath = true;
+      return save_dir;
+    }
+    else
+    {
+      strcpy(save_dir, root_dir);
+      strcat(save_dir, "/.local/share/Promesst/save.dat");
+    }
+  }
+  else
+  {
+    strcpy(save_dir, root_dir);
+    strcat(save_dir, "/Promesst/save.dat");
+  }
 
-	// Make all of the directories leading up to this.
-	int i;
-	for (i = 0; i < strlen(save_dir); ++i)
-	{
-		if (save_dir[i] == '/')
-		{
-			save_dir[i] = '\0';
+  // Make all of the directories leading up to this.
+  int i;
+  for (i = 0; i < strlen(save_dir); ++i)
+  {
+    if (save_dir[i] == '/')
+    {
+      save_dir[i] = '\0';
 #ifdef __MINGW32__
-			mkdir(save_dir);
+      mkdir(save_dir);
 #else
-			mkdir(save_dir, S_IRWXU);
+      mkdir(save_dir, S_IRWXU);
 #endif
-			save_dir[i] = '/';
-		}
-	}
-	gotpath = true;
-	return save_dir;
+      save_dir[i] = '/';
+    }
+  }
+  gotpath = true;
+  return save_dir;
 }
 
 static void load_game(void)
@@ -1290,9 +1282,9 @@ static void draw_rect(int x, int y, int w, int h, int s, int t, int scale, color
             {
                 if (c)
                 {
-                    px.r = px.r * c->r / 255;
-                    px.g = px.g * c->g / 255;
-                    px.b = px.b * c->b / 255;
+                    px.r = px.r * c->r * c->a >> 16;
+                    px.g = px.g * c->g * c->a >> 16;
+                    px.b = px.b * c->b * c->a >> 16;
                 }
                 // BGRA pixel format
                 uint8 temp = px.r;
@@ -1309,7 +1301,10 @@ static void draw_sprite(int x, int y, int s, int t, color *c, float a)
    x = x * 32 - 16;
    y = y * 32 - 8;
 
+   Uint8 temp;
+   if (c) { temp = c->a; c->a = a * 255; }
    draw_rect(x, y, 16, 16, s * 16, t * 16, 2, c);
+   if (c) { c->a = temp; }
 }
 
 static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c, float a)
@@ -1317,7 +1312,10 @@ static void draw_subsprite(int x, int y, int dx, int dy, int s, int t, color *c,
    x = x * 32 - 16 + dx * 2;
    y = y * 32 - 8 + dy * 2;
 
+   Uint8 temp;
+   if (c) { temp = c->a; c->a = a * 255; }
    draw_rect(x, y, 16, 16, s * 16, t * 16, 2, c);
+   if (c) { c->a = temp; }
 }
 
 static char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789>^<v/ ";
@@ -1333,22 +1331,22 @@ static int draw_text(int x, int y, int size, char *text, int r, int g, int b)
          color *tpx = (color *)tex->pixels;
          color *spx = (color *)screen->pixels;
          for (int j = 0; j < size * 7; ++j)
-			for (int i = 0; i < size * 5; ++i)
-			{
+      for (int i = 0; i < size * 5; ++i)
+      {
                 int offset = (y + j) * screen->pitch / 4 + x + i;
                 if (offset >= (SCREEN_X * SCREEN_Y))
                     continue;
-				color px = tpx[(t + j / size) * tex->pitch / 4 + s + i / size];
-				if (px.a)
-				{
-					// BGRA pixel format
-					px.r = b;
-					px.g = g;
-					px.b = r;
-					spx[offset] = px;
-				}
-			}
-		 SDL_UnlockSurface(screen);
+        color px = tpx[(t + j / size) * tex->pitch / 4 + s + i / size];
+        if (px.a)
+        {
+          // BGRA pixel format
+          px.r = b;
+          px.g = g;
+          px.b = r;
+          spx[offset] = px;
+        }
+      }
+     SDL_UnlockSurface(screen);
          x += size*6;
       }
       ++text;
@@ -1366,40 +1364,40 @@ void draw_metagame(float flicker)
 
 // draw background
 
-	if (main_mode == M_logo)
-	{
-	   for (i=0; i < 24; ++i) {
-		 int x = (rand() % 32)-32;
-		 int y = (rand() % 32)-32;
-		 int z = 6;//(rand() % 3) + 3;
-		 float t = (logo_time-100) / (float) MAX_LOGO;
-		 if (t < 0) t = 0;
-		 t = 1-sqrt(t);
-		 x += 16;
-		 y += 16;
-		 x = x * (t+1)*1;
-		 y = y * (t+1)*1;
-		 SDL_SetAlpha(sss_tex, SDL_SRCALPHA, 12 * (1-t));
-		 dstrect.x = x + (320 - 256) / 2;
-		 dstrect.y = y + (240 - 128) / 2;
-		 SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
-	   }
+  if (main_mode == M_logo)
+  {
+     for (i=0; i < 24; ++i) {
+     int x = (rand() % 32)-32;
+     int y = (rand() % 32)-32;
+     int z = 6;//(rand() % 3) + 3;
+     float t = (logo_time-100) / (float) MAX_LOGO;
+     if (t < 0) t = 0;
+     t = 1-sqrt(t);
+     x += 16;
+     y += 16;
+     x = x * (t+1)*1;
+     y = y * (t+1)*1;
+     SDL_SetAlpha(sss_tex, SDL_SRCALPHA, 12 * (1-t));
+     dstrect.x = x + (320 - 256) / 2;
+     dstrect.y = y + (240 - 128) / 2;
+     SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
+     }
    }
    else
    {
-	   for (int i = 0; i < SCREEN_X; i += 16)
-		for (int j = 0; j < SCREEN_Y; j += 16)
-		{
-			int c = rand() % 64 + 32;
-			int r = rand() % 32;
-			int g = rand() % 32;
-			int b = rand() % 32;
-			dstrect.x = i;
-			dstrect.y = j;
-			dstrect.w = 16;
-			dstrect.h = 16;
-			SDL_FillRect(screen, &dstrect, SDL_MapRGB(screen->format, c + r, c + g, c + b));
-		}
+     for (int i = 0; i < SCREEN_X; i += 16)
+    for (int j = 0; j < SCREEN_Y; j += 16)
+    {
+      int c = rand() % 64 + 32;
+      int r = rand() % 32;
+      int g = rand() % 32;
+      int b = rand() % 32;
+      dstrect.x = i;
+      dstrect.y = j;
+      dstrect.w = 16;
+      dstrect.h = 16;
+      SDL_FillRect(screen, &dstrect, SDL_MapRGB(screen->format, c + r, c + g, c + b));
+    }
    }
 
    if (main_mode == M_logo) {
@@ -1407,9 +1405,9 @@ void draw_metagame(float flicker)
       if (t < 0) t = 0;
       t = sqrt(t);
       SDL_SetAlpha(sss_tex, SDL_SRCALPHA, (1-t) * 255);
-	  dstrect.x = (320 - 256) / 2;
-	  dstrect.y = (240 - 128) / 2;
-	  SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
+    dstrect.x = (320 - 256) / 2;
+    dstrect.y = (240 - 128) / 2;
+    SDL_BlitSurface(sss_tex, NULL, screen, &dstrect);
       return;
    }
 
@@ -1437,13 +1435,13 @@ void draw_metagame(float flicker)
             int r, g, b;
 
             if (!selected) {
-				r = 140;
-				g = 90;
-				b = 140;
+        r = 140;
+        g = 90;
+        b = 140;
             } else {
-				r = 127 + 128 * flicker;
-				g = 64 + 64 * flicker;
-				b = 127 + 128 * flicker;
+        r = 127 + 128 * flicker;
+        g = 64 + 64 * flicker;
+        b = 127 + 128 * flicker;
             }
             draw_text(sx - width/2, sy, scale, choices[i], r, g, b);
             sy += 20;
@@ -1595,7 +1593,7 @@ void draw_world(void)
          if (x >= -1 && x <= SIZE_X && y >= -1 && y <= SIZE_Y) {
             if (t == T_projector) {
                int p = has_power[my/SIZE_Y][mx/SIZE_X];
-               draw_sprite(x+1,y+1, 4+p, 2, &powers[o.color], 0.5);
+               draw_sprite(x+1,y+1, 4+p, 2, &powers[o.color], 0.5 + 0.5 * flicker);
             }
          }
       }
@@ -1939,96 +1937,96 @@ int loopmode(float dt)
 
 int main(int argc, char **argv)
 {
-	// handle command line parameters
-	int i;
-	bool fullscreen = false;
-	for (i = 1; i < argc; ++i)
-	{
-		if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed") == 0))
-		{
-			fullscreen = false;
-		}
-		else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen") == 0))
-		{
-			fullscreen = true;
-		}
-	}
+  // handle command line parameters
+  int i;
+  bool fullscreen = false;
+  for (i = 1; i < argc; ++i)
+  {
+    if ((strcmp(argv[i],"-window") == 0) || (strcmp(argv[i],"-windowed") == 0))
+    {
+      fullscreen = false;
+    }
+    else if ((strcmp(argv[i],"-full") == 0) || (strcmp(argv[i],"-fullscreen") == 0))
+    {
+      fullscreen = true;
+    }
+  }
 
-	SDL_Init(SDL_INIT_VIDEO);
-	IMG_Init(IMG_INIT_PNG);
+  SDL_Init(SDL_INIT_VIDEO);
+  IMG_Init(IMG_INIT_PNG);
 
-	// create window
-	screen = SDL_SetVideoMode(SCREEN_X, SCREEN_Y, 32,
-		fullscreen ? SDL_FULLSCREEN : 0);
-	SDL_WM_SetCaption(APPNAME, NULL);
-	SDL_EnableKeyRepeat(1, 200);
+  // create window
+  screen = SDL_SetVideoMode(SCREEN_X, SCREEN_Y, 32,
+    fullscreen ? SDL_FULLSCREEN : 0);
+  SDL_WM_SetCaption(APPNAME, NULL);
+  SDL_EnableKeyRepeat(1, 200);
 
-	screen_x = SCREEN_X;
-	screen_y = SCREEN_Y;
+  screen_x = SCREEN_X;
+  screen_y = SCREEN_Y;
 
-	SDL_ShowCursor(SDL_FALSE);
+  SDL_ShowCursor(SDL_FALSE);
 
-	init_graphics();
+  init_graphics();
 
-	restart_game(); // necessary to populate the edge table on restore
-	load_game();
-	if (game_started)
-	  menu_selection = 0;
+  restart_game(); // necessary to populate the edge table on restore
+  load_game();
+  if (game_started)
+    menu_selection = 0;
 
-	// event loop
-	SDL_Event msg;
+  // event loop
+  SDL_Event msg;
 
-	float mintime = 0.016f;
-	double lastTime = -1;
+  float mintime = 0.016f;
+  double lastTime = -1;
 
-	for (;;) {
-		while (SDL_PollEvent(&msg))
-		{
-			switch (msg.type)
-			{
-				case SDL_QUIT:
-				  save_game();
-				  return 0;
-				case SDL_VIDEORESIZE:
-					screen_x = msg.resize.w;
-					screen_y = msg.resize.h;
-					loopmode(0);
-					break;
-				case SDL_KEYDOWN:
-					switch (msg.key.keysym.sym) {
-						case SDLK_DOWN : queued_key = 's'; break;
-						case SDLK_LEFT : queued_key = 'a'; break;
-						case SDLK_RIGHT: queued_key = 'd'; break;
-						case SDLK_UP   : queued_key = 'w'; break;
-					}
-					if (msg.key.keysym.sym < 128)
-					{
-						queued_key = msg.key.keysym.sym;
-					}
-					break;
+  for (;;) {
+    while (SDL_PollEvent(&msg))
+    {
+      switch (msg.type)
+      {
+        case SDL_QUIT:
+          save_game();
+          return 0;
+        case SDL_VIDEORESIZE:
+          screen_x = msg.resize.w;
+          screen_y = msg.resize.h;
+          loopmode(0);
+          break;
+        case SDL_KEYDOWN:
+          switch (msg.key.keysym.sym) {
+            case SDLK_DOWN : queued_key = 's'; break;
+            case SDLK_LEFT : queued_key = 'a'; break;
+            case SDLK_RIGHT: queued_key = 'd'; break;
+            case SDLK_UP   : queued_key = 'w'; break;
+          }
+          if (msg.key.keysym.sym < 128)
+          {
+            queued_key = msg.key.keysym.sym;
+          }
+          break;
 
-			 }
-		}
+       }
+    }
 
-		// and now call update
-		float elapsedTime;
-		double thisTime;
+    // and now call update
+    float elapsedTime;
+    double thisTime;
 
-		if (lastTime == -1)
-		  lastTime = SDL_GetTicks() / 1000.0 - mintime;
+    if (lastTime == -1)
+      lastTime = SDL_GetTicks() / 1000.0 - mintime;
 
-		for(;;) {
-			SDL_Delay(5);
-			thisTime = SDL_GetTicks() / 1000.0;
-			elapsedTime = (float) (thisTime - lastTime);
-			if (elapsedTime >= mintime) {
-				lastTime = thisTime;
-				break;
-			}
-		}
-		loopmode(elapsedTime);
-		draw();
-	}
+    for(;;) {
+      SDL_Delay(5);
+      thisTime = SDL_GetTicks() / 1000.0;
+      elapsedTime = (float) (thisTime - lastTime);
+      if (elapsedTime >= mintime) {
+        lastTime = thisTime;
+        break;
+      }
+    }
+    loopmode(elapsedTime);
+    draw();
+  }
 
-	return 0;
+  return 0;
 }
