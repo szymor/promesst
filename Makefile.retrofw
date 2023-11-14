@@ -1,0 +1,9 @@
+CC = mipsel-linux-gcc
+PKGCONFIG = $(shell mipsel-linux-gcc --print-sysroot)/../../bin/pkg-config
+LFLAGS = `$(PKGCONFIG) --cflags --libs sdl SDL_image SDL_gfx` -DRETROFW -Ofast
+
+opk: promesst icon.png README.md promesst.retrofw.desktop data
+	mksquashfs $^ promesst.opk -noappend -no-xattrs
+.PHONY: opk
+
+include common.mk

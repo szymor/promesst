@@ -2003,6 +2003,10 @@ int main(int argc, char **argv)
             case SDLK_LCTRL : queued_key = 'x'; break;
             case SDLK_LALT  : queued_key = 'z'; break;
 #endif
+#ifdef RETROFW
+            case SDLK_LCTRL : queued_key = 'z'; break;
+            case SDLK_LALT  : queued_key = 'x'; break;
+#endif
           }
           if (!queued_key && msg.key.keysym.sym < 128)
           {

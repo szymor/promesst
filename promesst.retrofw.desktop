@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Promesst
+Comment=A puzzle game inspired by Corrypt and Game Title
+Exec=promesst
+Terminal=false
+Type=Game
+StartupNotify=true
+Icon=icon
+Categories=games;
+Version=20231114
+X-OD-Manual=README.md
